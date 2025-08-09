@@ -64,6 +64,16 @@ export default function Login({ onLoggedIn }) {
           Для первого входа используйте аккаунт администратора из .env на бэкенде
         </p>
       </form>
+
+      <div className="mt-4">
+          <div className="text-center text-xs text-gray-500 mb-2">или</div>
+          <a
+            href="/api/auth/google"
+            className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition bg-white border border-gray-300 hover:bg-gray-50 w-full dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700"
+          >
+            Continue with Google
+          </a>
+        </div>
     </section>
   );
 }
