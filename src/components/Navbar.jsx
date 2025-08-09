@@ -18,7 +18,7 @@ export default function Navbar({ user, setUser, theme, setTheme, lang, setLang }
     <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/70 backdrop-blur dark:bg-gray-950/70 dark:border-gray-800">
       <div className="mx-auto max-w-5xl px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-brand-600 text-white grid place-items-center font-bold">K</div>
+          <div className="h-8 w-8 rounded-lg bg-blue-600 text-white grid place-items-center font-bold">K</div>
           <span className="font-semibold">Kursovoi</span>
         </div>
 
@@ -28,10 +28,16 @@ export default function Navbar({ user, setUser, theme, setTheme, lang, setLang }
           {user ? (
             <UserMenu user={user} onLogout={handleLogout} />
           ) : (
-            <a href="#login" onClick={(e) => {
-              e.preventDefault();
-              window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-            }} className="btn-primary">Sign in</a>
+            <a
+              href="#login"
+              onClick={(e) => {
+                e.preventDefault();
+                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+              }}
+              className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
+            >
+              Sign in
+            </a>
           )}
         </div>
       </div>

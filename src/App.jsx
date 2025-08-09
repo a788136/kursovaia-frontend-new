@@ -11,11 +11,14 @@ export default function App() {
 
   // применяем тему
   useEffect(() => {
+  const apply = (t) => {
     const root = document.documentElement;
-    if (theme === 'dark') root.classList.add('dark');
+    if (t === 'dark') root.classList.add('dark');
     else root.classList.remove('dark');
-    localStorage.setItem('theme', theme);
-  }, [theme]);
+    localStorage.setItem('theme', t);
+  };
+  apply(theme);
+}, [theme]);
 
   // язык
   useEffect(() => {
