@@ -6,6 +6,7 @@ import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
 import ProfilePage from './pages/ProfilePage';
 import AllInventories from './pages/AllInventories'; // ⬅️ НОВОЕ
+import InventoryDetails from './pages/InventoryDetails';
 
 function ProtectedRoute({ isAuthed, children }) {
   if (!isAuthed) return <Navigate to="/" replace />;
@@ -111,6 +112,8 @@ export default function App() {
 
           {/* Фолбэк */}
           <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/inventories" element={<AllInventories />} />
+          <Route path="/inventories/:id" element={<InventoryDetails user={user} />} /> 
         </Routes>
       </main>
     </div>

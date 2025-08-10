@@ -1,27 +1,25 @@
 // src/pages/AllInventories.jsx
+// src/pages/AllInventories.jsx
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { inventoryService } from '../services/inventoryService';
 import InventoryForm from '../components/InventoryForm';
 import Modal from '../components/Modal';
 
-// В проектных требованиях нельзя ставить кнопки в строках таблицы.
-// Поэтому редактирование открываем по клику на строку, а "Создать" — в тулбаре.
 export default function AllInventories() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [q, setQ] = useState('');
   const [sortKey, setSortKey] = useState('name');
-  const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
+  const [sortDir, setSortDir] = useState('asc');
 
   const [showCreate, setShowCreate] = useState(false);
-  const [editItem, setEditItem] = useState(null);
-
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
-  const [updating, setUpdating] = useState(false);
 
-  // загрузка списка
+  const navigate = useNavigate();
+
   useEffect(() => {
     (async () => {
       try {
@@ -43,7 +41,7 @@ export default function AllInventories() {
       const desc = norm(r.description);
       const tags = Array.isArray(r.tags) ? r.tags.map(t => norm(t)).join(' ') : '';
       const ownerName = typeof r.owner === 'object' && r.owner?.name ? norm(r.owner.name) : '';
-      const ownerId = (typeof r.owner === 'string' ? r.owner : '').toLowerCase();
+      const ownerId = (typeof r.owner === 'string' ? r.owner : r.owner_id || '').toString().toLowerCase();
       const query = q.trim().toLowerCase();
       return !query || name.includes(query) || desc.includes(query) || tags.includes(query) || ownerName.includes(query) || ownerId.includes(query);
     });
@@ -65,45 +63,25 @@ export default function AllInventories() {
     else { setSortKey(key); setSortDir('asc'); }
   };
 
-  // СОЗДАНИЕ — реальный POST
+  // Создание — POST
   const handleCreate = async (payload) => {
     setCreating(true);
     setError('');
     try {
-      const created = await inventoryService.create(payload); // ← Требуется валидный JWT (авторизация)
+      const created = await inventoryService.create(payload); // нужен валидный JWT
       setRows(prev => [created, ...prev]);
       setShowCreate(false);
     } catch (e) {
       console.error(e);
-      // Заметка: 401 — нет/просрочен токен; 403 — нет прав; 400 — серверная валидация
       setError(e?.response?.data?.error || 'Не удалось создать инвентаризацию');
     } finally {
       setCreating(false);
     }
   };
 
-  // ОБНОВЛЕНИЕ — реальный PUT
-  const handleUpdate = async (payload) => {
-    if (!editItem?._id) return;
-    setUpdating(true);
-    setError('');
-    try {
-      const updated = await inventoryService.update(editItem._id, payload); // ← Требуется валидный JWT + права
-      setRows(prev => prev.map(r => (String(r._id) === String(updated._id) ? updated : r)));
-      setEditItem(null);
-    } catch (e) {
-      console.error(e);
-      // Заметка: 401 — нет/просрочен токен; 403 — не владелец/не админ; 400 — серверная валидация
-      setError(e?.response?.data?.error || 'Не удалось обновить инвентаризацию');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
   if (loading) return <div className="text-gray-500">Загрузка...</div>;
   return (
     <div className="space-y-6">
-      {/* Ошибка верхнего уровня */}
       {error && (
         <div className="rounded-lg border border-red-300 bg-red-50 text-red-700 px-4 py-2">
           {error}
@@ -123,7 +101,7 @@ export default function AllInventories() {
         <button
           onClick={() => { setShowCreate(true); setError(''); }}
           className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-          disabled={creating || updating}
+          disabled={creating}
           title="Создать новую инвентаризацию"
         >
           Создать
@@ -147,15 +125,15 @@ export default function AllInventories() {
             {filtered.map(row => {
               const author =
                 (typeof row.owner === 'object' && row.owner?.name) ? row.owner.name
-                : (typeof row.owner === 'string' ? row.owner
-                : '—');
+                : (row.owner_id ? String(row.owner_id)
+                : (typeof row.owner === 'string' ? row.owner : '—'));
 
               return (
                 <tr
                   key={row._id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer"
-                  onClick={() => { setEditItem(row); setError(''); }} // редактирование — по клику
-                  title="Нажмите, чтобы редактировать"
+                  onClick={() => navigate(`/inventories/${row._id}`)} // ← Переход на страницу
+                  title="Открыть страницу инвентаризации"
                 >
                   <td className="px-4 py-2">
                     {row.cover ? (
@@ -193,24 +171,6 @@ export default function AllInventories() {
           onCancel={() => setShowCreate(false)}
         />
         {/* Примечание: для POST нужен авторизованный пользователь (JWT в Authorization) */}
-      </Modal>
-
-      {/* Модалка Редактирования */}
-      <Modal open={!!editItem} onClose={() => setEditItem(null)} title="Редактировать инвентаризацию">
-        {editItem && (
-          <InventoryForm
-            submitText={updating ? 'Сохраняем…' : 'Сохранить'}
-            initial={{
-              name: editItem.name || '',
-              description: editItem.description || '',
-              cover: editItem.cover || '',
-              tags: Array.isArray(editItem.tags) ? editItem.tags.join(', ') : '',
-            }}
-            onSubmit={handleUpdate}
-            onCancel={() => setEditItem(null)}
-          />
-        )}
-        {/* Примечание: PUT доступен только владельцу/админу; иначе будет 403 */}
       </Modal>
     </div>
   );
