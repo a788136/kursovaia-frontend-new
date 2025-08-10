@@ -1,5 +1,5 @@
 // src/components/InventoryForm.jsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 // Простая валидация
 const validators = {
@@ -39,7 +39,8 @@ const validators = {
 };
 
 function useFormState(initial) {
-  const [values, setValues] = useState(initial);
+  // Инициализируем один раз
+  const [values, setValues] = useState(() => initial);
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
 
@@ -79,15 +80,22 @@ function useFormState(initial) {
 }
 
 export default function InventoryForm({
-  initial = { name: '', description: '', cover: '', tags: '' },
+  initial,                 // ← больше НЕТ дефолт-объекта здесь
   onSubmit,
   onCancel,
   submitText = 'Сохранить',
   title = 'Инвентаризация',
 }) {
-  const { values, setValues, errors, validateAll, isValid, onChange, onBlur } = useFormState(initial);
+  // Стабильный пустой initial для режима создания
+  const blankRef = useRef({ name: '', description: '', cover: '', tags: '' });
+  const safeInitial = initial ?? blankRef.current;
 
-  useEffect(() => { setValues(initial); }, [initial, setValues]);
+  const { values, setValues, errors, validateAll, isValid, onChange, onBlur } = useFormState(safeInitial);
+
+  // Сбрасываем значения ТОЛЬКО когда действительно пришёл новый initial (режим редактирования)
+  useEffect(() => {
+    if (initial) setValues(initial);
+  }, [initial, setValues]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -114,6 +122,7 @@ export default function InventoryForm({
       <div>
         <label className="block text-sm mb-1">Название *</label>
         <input
+          type="text"
           name="name"
           value={values.name}
           onChange={onChange}
@@ -141,6 +150,7 @@ export default function InventoryForm({
       <div>
         <label className="block text-sm mb-1">Обложка (URL)</label>
         <input
+          type="url"
           name="cover"
           value={values.cover}
           onChange={onChange}
@@ -154,6 +164,7 @@ export default function InventoryForm({
       <div>
         <label className="block text-sm mb-1">Теги (через запятую)</label>
         <input
+          type="text"
           name="tags"
           value={values.tags}
           onChange={onChange}
