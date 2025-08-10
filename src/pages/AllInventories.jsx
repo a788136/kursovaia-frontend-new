@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { inventoryService } from '../services/inventoryService';
 import InventoryForm from '../components/InventoryForm';
+import Modal from '../components/Modal';
 
 // В проектных требованиях нельзя ставить кнопки в строках таблицы.
 // Поэтому редактирование открываем по клику на строку, а "Создать" — в тулбаре.
@@ -25,9 +26,6 @@ export default function AllInventories() {
     (async () => {
       try {
         const data = await inventoryService.getAll();
-        // Поддержка обеих реализаций сервиса:
-        // - если вернули { items, ... }
-        // - если вернули просто массив
         setRows(Array.isArray(data) ? data : (data?.items ?? []));
       } catch (e) {
         console.error(e);
@@ -73,7 +71,6 @@ export default function AllInventories() {
     setError('');
     try {
       const created = await inventoryService.create(payload); // ← Требуется валидный JWT (авторизация)
-      // Оптимистично добавляем в начало списка
       setRows(prev => [created, ...prev]);
       setShowCreate(false);
     } catch (e) {
@@ -189,40 +186,32 @@ export default function AllInventories() {
       </div>
 
       {/* Модалка Создания */}
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 w-full max-w-xl">
-            <InventoryForm
-              title="Создать инвентаризацию"
-              submitText={creating ? 'Создаём…' : 'Создать'}
-              onSubmit={handleCreate}
-              onCancel={() => setShowCreate(false)}
-            />
-            {/* Примечание: для POST нужен авторизованный пользователь (JWT в Authorization) */}
-          </div>
-        </div>
-      )}
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Создать инвентаризацию">
+        <InventoryForm
+          submitText={creating ? 'Создаём…' : 'Создать'}
+          onSubmit={handleCreate}
+          onCancel={() => setShowCreate(false)}
+        />
+        {/* Примечание: для POST нужен авторизованный пользователь (JWT в Authorization) */}
+      </Modal>
 
       {/* Модалка Редактирования */}
-      {editItem && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 w-full max-w-xl">
-            <InventoryForm
-              title="Редактировать инвентаризацию"
-              submitText={updating ? 'Сохраняем…' : 'Сохранить'}
-              initial={{
-                name: editItem.name || '',
-                description: editItem.description || '',
-                cover: editItem.cover || '',
-                tags: Array.isArray(editItem.tags) ? editItem.tags.join(', ') : '',
-              }}
-              onSubmit={handleUpdate}
-              onCancel={() => setEditItem(null)}
-            />
-            {/* Примечание: PUT доступен только владельцу/админу; иначе будет 403 */}
-          </div>
-        </div>
-      )}
+      <Modal open={!!editItem} onClose={() => setEditItem(null)} title="Редактировать инвентаризацию">
+        {editItem && (
+          <InventoryForm
+            submitText={updating ? 'Сохраняем…' : 'Сохранить'}
+            initial={{
+              name: editItem.name || '',
+              description: editItem.description || '',
+              cover: editItem.cover || '',
+              tags: Array.isArray(editItem.tags) ? editItem.tags.join(', ') : '',
+            }}
+            onSubmit={handleUpdate}
+            onCancel={() => setEditItem(null)}
+          />
+        )}
+        {/* Примечание: PUT доступен только владельцу/админу; иначе будет 403 */}
+      </Modal>
     </div>
   );
 }
