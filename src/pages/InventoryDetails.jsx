@@ -1,88 +1,104 @@
-// src/pages/InventoryDetails.jsx
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { inventoryService } from '../services/inventoryService';
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams, Link } from "react-router-dom";
+import { getInventoryById } from "../services/inventories";
+import Tabs from "../components/ui/Tabs";
+import ItemsTab from "../components/inventory/ItemsTab";
+import ChatTab from "../components/inventory/ChatTab";
+import SettingsTab from "../components/inventory/SettingsTab";
+import CustomIdTab from "../components/inventory/CustomIdTab";
+import FieldsTab from "../components/inventory/FieldsTab";
+import AccessTab from "../components/inventory/AccessTab";
+import StatsTab from "../components/inventory/StatsTab";
+import ExportTab from "../components/inventory/ExportTab";
 
-export default function InventoryDetails({ user }) {
+const TAB_VALUES = [
+  { value: "items", label: "Items" },
+  { value: "chat", label: "Chat" },
+  { value: "settings", label: "Settings" },
+  { value: "custom-id", label: "Custom ID" },
+  { value: "fields", label: "Fields" },
+  { value: "access", label: "Access" },
+  { value: "stats", label: "Stats" },
+  { value: "export", label: "Export" },
+];
+
+export default function InventoryDetails() {
   const { id } = useParams();
-  const navigate = useNavigate();
-
-  const [item, setItem] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
+  const [error, setError] = useState("");
+  const [inventory, setInventory] = useState(null);
+
+  const activeTab = useMemo(() => {
+    const q = searchParams.get("tab");
+    return TAB_VALUES.some(t => t.value === q) ? q : "items";
+  }, [searchParams]);
+
+  const onTabChange = (nextValue) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", nextValue);
+    setSearchParams(next, { replace: true });
+  };
 
   useEffect(() => {
-    (async () => {
-      try {
-        const data = await inventoryService.getById(id);
-        setItem(data);
-      } catch (e) {
-        console.error(e);
-        setErr(e?.response?.data?.error || 'Не удалось загрузить инвентаризацию');
-      } finally {
+    let ignore = false;
+    setLoading(true);
+    setError("");
+    getInventoryById(id)
+      .then((data) => {
+        if (ignore) return;
+        setInventory(data);
+      })
+      .catch((e) => {
+        if (ignore) return;
+        setError(e?.message || "Failed to load inventory");
+      })
+      .finally(() => {
+        if (ignore) return;
         setLoading(false);
-      }
-    })();
+      });
+    return () => {
+      ignore = true;
+    };
   }, [id]);
 
-  const canEdit = !!user && (
-    user.isAdmin === true ||
-    String(user.id || user._id) === String(item?.owner_id)
-  );
-
-  const title = item?.name || item?.title || 'Инвентаризация';
-  const cover = item?.cover || item?.image || '';
-  const tags = Array.isArray(item?.tags) ? item.tags : [];
-
-  if (loading) return <div className="text-gray-500">Загрузка...</div>;
-  if (err) return (
-    <div className="space-y-4">
-      <button onClick={() => navigate(-1)} className="px-3 py-1.5 border rounded-lg">&larr; Назад</button>
-      <div className="rounded-lg border border-red-300 bg-red-50 text-red-700 px-4 py-2">{err}</div>
-    </div>
-  );
+  const title = inventory?.name || `Inventory ${id}`;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start gap-4">
-        <button onClick={() => navigate(-1)} className="px-3 py-1.5 border rounded-lg">&larr; Назад</button>
-        {canEdit && (
-          <Link
-            to={`/inventories/${id}/edit`}
-            className="px-3 py-1.5 rounded-lg border hover:bg-gray-50 dark:hover:bg-gray-800"
-          >
-            Редактировать
-          </Link>
-        )}
+    <div className="max-w-7xl mx-auto p-4 md:p-6">
+      <div className="flex items-center gap-3 mb-4">
+        <Link to="/inventories" className="text-sm opacity-70 hover:opacity-100">← Back</Link>
+        <h1 className="text-2xl font-semibold">{title}</h1>
       </div>
 
-      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6">
-        <div className="flex flex-col md:flex-row gap-6">
-          <div className="w-28 h-28 flex-shrink-0">
-            {cover ? (
-              <img src={cover} alt="" className="w-28 h-28 object-cover rounded-xl border" />
-            ) : (
-              <div className="w-28 h-28 rounded-xl border flex items-center justify-center text-sm text-gray-400">Нет фото</div>
-            )}
-          </div>
-          <div className="flex-1">
-            <h1 className="text-2xl font-semibold">{title}</h1>
-            <p className="mt-2 text-gray-600 dark:text-gray-400">{item?.description || 'Нет описания'}</p>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {tags.length ? tags.map(t => (
-                <span key={t} className="px-2 py-1 text-xs rounded-full border">{t}</span>
-              )) : <span className="text-sm text-gray-400">Без тегов</span>}
-            </div>
-
-            <div className="mt-4 text-sm text-gray-500">
-              <div><span className="text-gray-400">ID:</span> {item?._id}</div>
-              {item?.owner_id && <div><span className="text-gray-400">Владелец:</span> {String(item.owner_id)}</div>}
-              {item?.updatedAt && <div><span className="text-gray-400">Обновлено:</span> {new Date(item.updatedAt).toLocaleString()}</div>}
-            </div>
-          </div>
+      {loading && (
+        <div className="animate-pulse p-4 rounded-2xl border">
+          Loading inventory…
         </div>
-      </div>
+      )}
+
+      {error && (
+        <div className="p-4 rounded-2xl border border-red-300 bg-red-50 text-red-800">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && (
+        <>
+          <Tabs tabs={TAB_VALUES} value={activeTab} onChange={onTabChange} />
+
+          <div className="mt-4">
+            {activeTab === "items" && <ItemsTab inventory={inventory} />}
+            {activeTab === "chat" && <ChatTab inventory={inventory} />}
+            {activeTab === "settings" && <SettingsTab inventory={inventory} />}
+            {activeTab === "custom-id" && <CustomIdTab inventory={inventory} />}
+            {activeTab === "fields" && <FieldsTab inventory={inventory} />}
+            {activeTab === "access" && <AccessTab inventory={inventory} />}
+            {activeTab === "stats" && <StatsTab inventory={inventory} />}
+            {activeTab === "export" && <ExportTab inventory={inventory} />}
+          </div>
+        </>
+      )}
     </div>
   );
 }
