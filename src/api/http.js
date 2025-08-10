@@ -1,8 +1,15 @@
 import axios from 'axios';
+import { getToken } from './token';
 
 const http = axios.create({
-  baseURL: '/api',          // идём через прокси на том же домене
-  withCredentials: true     // куки станут first‑party → браузер не режет
+  baseURL: '/api' // прокси на Vercel
+});
+
+// подставляем Bearer токен
+http.interceptors.request.use((config) => {
+  const t = getToken();
+  if (t) config.headers.Authorization = `Bearer ${t}`;
+  return config;
 });
 
 export default http;

@@ -3,15 +3,13 @@ import http from '../api/http';
 import UserMenu from './UserMenu';
 import ThemeToggle from './ThemeToggle';
 import LangToggle from './LangToggle';
+import { clearToken } from '../api/token';
 
 export default function Navbar({ user, setUser, theme, setTheme, lang, setLang }) {
   const handleLogout = async () => {
-    try {
-      await http.post('/auth/logout');
-      setUser(null);
-    } catch (e) {
-      console.error(e);
-    }
+    try { await http.post('/auth/logout'); } catch {}
+    clearToken();
+    setUser(null);
   };
 
   return (
@@ -21,7 +19,6 @@ export default function Navbar({ user, setUser, theme, setTheme, lang, setLang }
           <div className="h-8 w-8 rounded-lg bg-blue-600 text-white grid place-items-center font-bold">K</div>
           <span className="font-semibold">Kursovoi</span>
         </div>
-
         <div className="flex items-center gap-2">
           <LangToggle lang={lang} setLang={setLang} />
           <ThemeToggle theme={theme} setTheme={setTheme} />
@@ -30,10 +27,7 @@ export default function Navbar({ user, setUser, theme, setTheme, lang, setLang }
           ) : (
             <a
               href="#login"
-              onClick={(e) => {
-                e.preventDefault();
-                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-              }}
+              onClick={(e) => { e.preventDefault(); window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }}
               className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
             >
               Sign in
