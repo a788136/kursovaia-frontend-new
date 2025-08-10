@@ -32,7 +32,7 @@ export default function UserMenu({ user, onLogout, lang = 'ru' }) {
           </div>
 
           <button
-            className="block w-full text-left rounded-md px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="cursor-pointer block w-full text-left rounded-md px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
             onClick={() => {
               setOpen(false);
               navigate('/profile');
