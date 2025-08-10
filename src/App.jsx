@@ -1,16 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import http from './api/http';
 import { setToken, getToken, clearToken } from './api/token';
 import Navbar from './components/Navbar';
-import Login from './components/Login';
+import HomePage from './pages/HomePage';
+import ProfilePage from './pages/ProfilePage';
+
+function ProtectedRoute({ isAuthed, children }) {
+  if (!isAuthed) return <Navigate to="/" replace />;
+  return children;
+}
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser]   = useState(null);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
-  const [lang, setLang] = useState(localStorage.getItem('lang') || 'ru');
+  const [lang, setLang]   = useState(localStorage.getItem('lang') || 'ru');
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
-  // Считываем токен из hash после Google OAuth: #/oauth?token=...
+  // Считываем токен из hash после OAuth: #/oauth?token=...
   useEffect(() => {
     const hash = window.location.hash || '';
     if (hash.startsWith('#/oauth')) {
@@ -18,20 +26,24 @@ export default function App() {
       const token = q.get('token');
       if (token) {
         setToken(token);
-        // чистим hash, чтобы токен не светился в адресе
         history.replaceState(null, '', '/');
+        // после OAuth сразу на домашнюю
+        navigate('/', { replace: true });
       }
     }
-  }, []);
+  }, [navigate]);
 
+  // Тема
   useEffect(() => {
     const root = document.documentElement;
     if (theme === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  // Язык
   useEffect(() => { localStorage.setItem('lang', lang); }, [lang]);
 
+  // Проверяем текущего пользователя по JWT
   useEffect(() => {
     (async () => {
       try {
@@ -44,8 +56,11 @@ export default function App() {
         } else {
           setUser(null);
         }
-      } catch { setUser(null); }
-      finally { setLoading(false); }
+      } catch {
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, []);
 
@@ -58,30 +73,39 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
-      <Navbar user={user} setUser={(u) => {
-        if (!u) clearToken();
-        setUser(u);
-      }} theme={theme} setTheme={setTheme} lang={lang} setLang={setLang} />
+      <Navbar
+        user={user}
+        setUser={(u) => {
+          if (!u) clearToken();
+          setUser(u);
+        }}
+        theme={theme}
+        setTheme={setTheme}
+        lang={lang}
+        setLang={setLang}
+      />
+
       <main className="mx-auto max-w-5xl px-4 py-10">
-        {!user ? (
-          <div className="grid md:grid-cols-2 gap-8 items-start">
-            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800">
-              <h1 className="text-2xl font-semibold mb-2">{t[lang].welcome}</h1>
-              <p className="text-gray-600 dark:text-gray-400">{t[lang].needLogin}</p>
-            </div>
-            <Login onLoggedIn={setUser} lang={lang} />
-          </div>
-        ) : (
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800">
-            <h1 className="text-2xl font-semibold mb-4">Привет, {user.name}!</h1>
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              <div>Email: <span className="font-medium">{user.email}</span></div>
-              <div>Язык: <span className="font-medium">{user.lang}</span></div>
-              <div>Тема: <span className="font-medium">{user.theme}</span></div>
-              <div>Создан: {new Date(user.createdAt).toLocaleString()}</div>
-            </div>
-          </div>
-        )}
+        <Routes>
+          <Route path="/" element={
+            <HomePage
+              user={user}
+              lang={lang}
+              t={t}
+              onLoggedIn={(u) => {
+                setUser(u);
+                navigate('/', { replace: true });
+              }}
+            />
+          } />
+          <Route path="/profile" element={
+            <ProtectedRoute isAuthed={!!user}>
+              <ProfilePage user={user} />
+            </ProtectedRoute>
+          } />
+          {/* Фолбэк */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
     </div>
   );
