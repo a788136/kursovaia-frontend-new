@@ -69,7 +69,7 @@ export default function App() {
               <h1 className="text-2xl font-semibold mb-2">{t[lang].welcome}</h1>
               <p className="text-gray-600 dark:text-gray-400">{t[lang].needLogin}</p>
             </div>
-            <Login onLoggedIn={setUser} />
+            <Login onLoggedIn={setUser} lang={lang} />
           </div>
         ) : (
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800">
