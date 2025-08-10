@@ -5,6 +5,7 @@ import { setToken, getToken, clearToken } from './api/token';
 import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
 import ProfilePage from './pages/ProfilePage';
+import AllInventories from './pages/AllInventories'; // ⬅️ НОВОЕ
 
 function ProtectedRoute({ isAuthed, children }) {
   if (!isAuthed) return <Navigate to="/" replace />;
@@ -98,11 +99,16 @@ export default function App() {
               }}
             />
           } />
+
+          {/* НОВОЕ: страница со списком инвентаризаций */}
+          <Route path="/inventories" element={<AllInventories />} />
+
           <Route path="/profile" element={
             <ProtectedRoute isAuthed={!!user}>
               <ProfilePage user={user} />
             </ProtectedRoute>
           } />
+
           {/* Фолбэк */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
