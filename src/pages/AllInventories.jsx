@@ -8,18 +8,27 @@ import InventoryForm from '../components/InventoryForm';
 export default function AllInventories() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+
   const [q, setQ] = useState('');
   const [sortKey, setSortKey] = useState('name');
   const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
+
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState(null);
-  const [error, setError] = useState('');
 
+  const [error, setError] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [updating, setUpdating] = useState(false);
+
+  // загрузка списка
   useEffect(() => {
     (async () => {
       try {
         const data = await inventoryService.getAll();
-        setRows(data || []);
+        // Поддержка обеих реализаций сервиса:
+        // - если вернули { items, ... }
+        // - если вернули просто массив
+        setRows(Array.isArray(data) ? data : (data?.items ?? []));
       } catch (e) {
         console.error(e);
         setError('Не удалось загрузить инвентаризации');
@@ -58,38 +67,52 @@ export default function AllInventories() {
     else { setSortKey(key); setSortDir('asc'); }
   };
 
+  // СОЗДАНИЕ — реальный POST
   const handleCreate = async (payload) => {
-    // Пока бэк CRUD может быть не готов — попробуем и обновим список
+    setCreating(true);
+    setError('');
     try {
-      // const created = await inventoryService.create(payload);  // включим когда будет endpoint
-      // setRows(prev => [created, ...prev]);
-      console.log('Создание (пока без POST):', payload);
+      const created = await inventoryService.create(payload); // ← Требуется валидный JWT (авторизация)
+      // Оптимистично добавляем в начало списка
+      setRows(prev => [created, ...prev]);
       setShowCreate(false);
-      alert('Валидация прошла. Отправку на сервер подключим после готовности эндпоинтов.');
     } catch (e) {
       console.error(e);
-      alert('Не удалось создать. Проверь бэкенд эндпоинты /inventories (POST).');
+      // Заметка: 401 — нет/просрочен токен; 403 — нет прав; 400 — серверная валидация
+      setError(e?.response?.data?.error || 'Не удалось создать инвентаризацию');
+    } finally {
+      setCreating(false);
     }
   };
 
+  // ОБНОВЛЕНИЕ — реальный PUT
   const handleUpdate = async (payload) => {
+    if (!editItem?._id) return;
+    setUpdating(true);
+    setError('');
     try {
-      // const updated = await inventoryService.update(editItem._id, payload); // включим позже
-      // setRows(prev => prev.map(r => (r._id === updated._id ? updated : r)));
-      console.log('Редактирование (пока без PUT):', { id: editItem?._id, ...payload });
+      const updated = await inventoryService.update(editItem._id, payload); // ← Требуется валидный JWT + права
+      setRows(prev => prev.map(r => (String(r._id) === String(updated._id) ? updated : r)));
       setEditItem(null);
-      alert('Валидация прошла. PUT подключим позже.');
     } catch (e) {
       console.error(e);
-      alert('Не удалось обновить. Проверь бэкенд эндпоинт /inventories/:id (PUT).');
+      // Заметка: 401 — нет/просрочен токен; 403 — не владелец/не админ; 400 — серверная валидация
+      setError(e?.response?.data?.error || 'Не удалось обновить инвентаризацию');
+    } finally {
+      setUpdating(false);
     }
   };
 
   if (loading) return <div className="text-gray-500">Загрузка...</div>;
-  if (error) return <div className="text-red-600">{error}</div>;
-
   return (
     <div className="space-y-6">
+      {/* Ошибка верхнего уровня */}
+      {error && (
+        <div className="rounded-lg border border-red-300 bg-red-50 text-red-700 px-4 py-2">
+          {error}
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-col md:flex-row md:items-center gap-3">
         <div className="text-2xl font-semibold">Инвентаризации</div>
@@ -101,8 +124,10 @@ export default function AllInventories() {
           className="w-full md:w-80 border rounded-lg px-3 py-2"
         />
         <button
-          onClick={() => setShowCreate(true)}
-          className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+          onClick={() => { setShowCreate(true); setError(''); }}
+          className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+          disabled={creating || updating}
+          title="Создать новую инвентаризацию"
         >
           Создать
         </button>
@@ -132,7 +157,7 @@ export default function AllInventories() {
                 <tr
                   key={row._id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer"
-                  onClick={() => setEditItem(row)} // редактирование — по клику
+                  onClick={() => { setEditItem(row); setError(''); }} // редактирование — по клику
                   title="Нажмите, чтобы редактировать"
                 >
                   <td className="px-4 py-2">
@@ -169,10 +194,11 @@ export default function AllInventories() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 w-full max-w-xl">
             <InventoryForm
               title="Создать инвентаризацию"
-              submitText="Создать"
+              submitText={creating ? 'Создаём…' : 'Создать'}
               onSubmit={handleCreate}
               onCancel={() => setShowCreate(false)}
             />
+            {/* Примечание: для POST нужен авторизованный пользователь (JWT в Authorization) */}
           </div>
         </div>
       )}
@@ -183,7 +209,7 @@ export default function AllInventories() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 w-full max-w-xl">
             <InventoryForm
               title="Редактировать инвентаризацию"
-              submitText="Сохранить"
+              submitText={updating ? 'Сохраняем…' : 'Сохранить'}
               initial={{
                 name: editItem.name || '',
                 description: editItem.description || '',
@@ -193,6 +219,7 @@ export default function AllInventories() {
               onSubmit={handleUpdate}
               onCancel={() => setEditItem(null)}
             />
+            {/* Примечание: PUT доступен только владельцу/админу; иначе будет 403 */}
           </div>
         </div>
       )}
