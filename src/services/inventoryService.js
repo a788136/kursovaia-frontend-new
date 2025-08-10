@@ -1,51 +1,69 @@
-// src/services/inventoryService.js
-// Используем ваш http (axios-инстанс с JWT и базовым URL)
-import http from '../api/http';
+const API_BASE_INV = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "";
 
-// ⚠️ На бэке пока есть публичный /inventories/latest, полноценного /inventories (все) может не быть.
-// Для списка "всех" пока используем latest с большим лимитом.
-const ALL_LIMIT = 500;
+function authHeaders(token) {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function handle(res) {
+  const ct = res.headers.get('content-type') || '';
+  let body = null;
+  if (ct.includes('application/json')) {
+    try { body = await res.json(); } catch {}
+  } else {
+    try { body = await res.text(); } catch {}
+  }
+  if (!res.ok) {
+    const msg = (body && (body.error || body.message)) || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  // Возвращаем data|items|inventory|сам объект/массив
+  if (body && typeof body === 'object') {
+    if (Array.isArray(body)) return body;
+    return body.data ?? body.items ?? body.inventory ?? body;
+  }
+  return body;
+}
 
 export const inventoryService = {
-  // Список для таблицы (временно через /inventories/latest)
   async getAll() {
-    const { data } = await http.get(`/inventories/latest?limit=${ALL_LIMIT}`);
-    return data;
+    const res = await fetch(`${API_BASE_INV}/inventories`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    return handle(res);
   },
 
-  async getLatest(limit = 10) {
-    const { data } = await http.get(`/inventories/latest?limit=${limit}`);
-    return data;
+  async getById(id, token) {
+    const res = await fetch(`${API_BASE_INV}/inventories/${id}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json', ...authHeaders(token) },
+    });
+    return handle(res);
   },
 
-  async getTop() {
-    const { data } = await http.get('/inventories/top');
-    return data;
+  async create(payload, token) {
+    const res = await fetch(`${API_BASE_INV}/inventories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify(payload),
+    });
+    return handle(res);
   },
 
-  async getTags() {
-    const { data } = await http.get('/tags');
-    return data;
+  async update(id, payload, token) {
+    const res = await fetch(`${API_BASE_INV}/inventories/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify(payload),
+    });
+    return handle(res);
   },
 
-  // Заготовки под CRUD (могут вернуть 404, если бэк еще не готов)
-  async getById(id) {
-    const { data } = await http.get(`/inventories/${id}`);
-    return data;
-  },
-
-  async create(payload) {
-    const { data } = await http.post('/inventories', payload);
-    return data;
-  },
-
-  async update(id, payload) {
-    const { data } = await http.put(`/inventories/${id}`, payload);
-    return data;
-  },
-
-  async remove(id) {
-    const { data } = await http.delete(`/inventories/${id}`);
-    return data;
+  async remove(id, token) {
+    const res = await fetch(`${API_BASE_INV}/inventories/${id}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json', ...authHeaders(token) },
+    });
+    return handle(res);
   },
 };

@@ -5,6 +5,38 @@ import { inventoryService } from '../services/inventoryService';
 import InventoryForm from '../components/InventoryForm';
 import Modal from '../components/Modal';
 
+// Небольшой хелпер: достать JWT (если используешь контекст — замени здесь)
+function getToken() {
+  try {
+    return localStorage.getItem('token') || '';
+  } catch {
+    return '';
+  }
+}
+
+// Универсальный маппер элемента инвентаризации (если бэк вернул другие ключи)
+function normalizeInventory(raw) {
+  if (!raw || typeof raw !== 'object') return raw;
+  const ownerName =
+    typeof raw.owner === 'object' && raw.owner?.name
+      ? raw.owner.name
+      : undefined;
+
+  return {
+    _id: raw._id || raw.id || raw._id?.$oid || '',
+    name: raw.name || raw.title || 'Без названия',
+    description: raw.description || raw.desc || '',
+    // возможные варианты поля с картинкой
+    cover: raw.cover || raw.image || raw.imageUrl || null,
+    tags: Array.isArray(raw.tags) ? raw.tags : [],
+    owner: raw.owner ?? null,
+    owner_id: raw.owner_id ?? (typeof raw.owner === 'string' ? raw.owner : undefined),
+    ownerName,
+    // оставляем остальное как есть
+    ...raw,
+  };
+}
+
 export default function AllInventories() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,9 +53,12 @@ export default function AllInventories() {
 
   useEffect(() => {
     (async () => {
+      setLoading(true);
+      setError('');
       try {
-        const data = await inventoryService.getAll();
-        setRows(Array.isArray(data) ? data : (data?.items ?? []));
+        const data = await inventoryService.getAll(); // публичный GET — без cookies
+        const list = Array.isArray(data) ? data : (data?.items ?? []);
+        setRows(list.map(normalizeInventory));
       } catch (e) {
         console.error(e);
         setError('Не удалось загрузить инвентаризации');
@@ -35,12 +70,17 @@ export default function AllInventories() {
 
   const filtered = useMemo(() => {
     const norm = (s) => (s || '').toString().toLowerCase();
+
     let arr = rows.filter(r => {
       const name = norm(r.name);
       const desc = norm(r.description);
       const tags = Array.isArray(r.tags) ? r.tags.map(t => norm(t)).join(' ') : '';
-      const ownerName = typeof r.owner === 'object' && r.owner?.name ? norm(r.owner.name) : '';
-      const ownerId = (typeof r.owner === 'string' ? r.owner : r.owner_id || '').toString().toLowerCase();
+      const ownerName = r.ownerName ? norm(r.ownerName)
+        : (typeof r.owner === 'object' && r.owner?.name ? norm(r.owner.name) : '');
+      const ownerId = (typeof r.owner === 'string' ? r.owner : r.owner_id || '')
+        .toString()
+        .toLowerCase();
+
       const query = q.trim().toLowerCase();
       return !query || name.includes(query) || desc.includes(query) || tags.includes(query) || ownerName.includes(query) || ownerId.includes(query);
     });
@@ -62,23 +102,32 @@ export default function AllInventories() {
     else { setSortKey(key); setSortDir('asc'); }
   };
 
-  // Создание — POST
+  // Создание — POST (требует валидный JWT в Authorization)
   const handleCreate = async (payload) => {
     setCreating(true);
     setError('');
     try {
-      const created = await inventoryService.create(payload); // нужен валидный JWT
-      setRows(prev => [created, ...prev]);
+      const token = getToken();
+      const created = await inventoryService.create(payload, token);
+      // На всякий — нормализуем ответ
+      setRows(prev => [normalizeInventory(created), ...prev]);
       setShowCreate(false);
     } catch (e) {
       console.error(e);
-      setError(e?.response?.data?.error || 'Не удалось создать инвентаризацию');
+      // axios-стиль или fetch-стиль — пробуем оба варианта
+      const message =
+        e?.response?.data?.error ||
+        e?.response?.data?.message ||
+        e?.message ||
+        'Не удалось создать инвентаризацию';
+      setError(message);
     } finally {
       setCreating(false);
     }
   };
 
   if (loading) return <div className="text-gray-500">Загрузка...</div>;
+
   return (
     <div className="space-y-6">
       {error && (
@@ -131,7 +180,7 @@ export default function AllInventories() {
                 <tr
                   key={row._id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer"
-                  onClick={() => navigate(`/inventories/${row._id}`)} // ← Переход на страницу
+                  onClick={() => navigate(`/inventories/${row._id}`)}
                   title="Открыть страницу инвентаризации"
                 >
                   <td className="px-4 py-2">
