@@ -1,9 +1,7 @@
 // src/pages/InventoryDetails.jsx
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { inventoryService } from '../services/inventoryService';
-import Modal from '../components/Modal';
-import InventoryForm from '../components/InventoryForm';
 
 export default function InventoryDetails({ user }) {
   const { id } = useParams();
@@ -12,8 +10,6 @@ export default function InventoryDetails({ user }) {
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-  const [editOpen, setEditOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -38,21 +34,6 @@ export default function InventoryDetails({ user }) {
   const cover = item?.cover || item?.image || '';
   const tags = Array.isArray(item?.tags) ? item.tags : [];
 
-  const handleUpdate = async (payload) => {
-    setSaving(true);
-    setErr('');
-    try {
-      const updated = await inventoryService.update(id, payload);
-      setItem(updated);
-      setEditOpen(false);
-    } catch (e) {
-      console.error(e);
-      setErr(e?.response?.data?.error || 'Не удалось сохранить изменения');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   if (loading) return <div className="text-gray-500">Загрузка...</div>;
   if (err) return (
     <div className="space-y-4">
@@ -65,6 +46,14 @@ export default function InventoryDetails({ user }) {
     <div className="space-y-6">
       <div className="flex items-start gap-4">
         <button onClick={() => navigate(-1)} className="px-3 py-1.5 border rounded-lg">&larr; Назад</button>
+        {canEdit && (
+          <Link
+            to={`/inventories/${id}/edit`}
+            className="px-3 py-1.5 rounded-lg border hover:bg-gray-50 dark:hover:bg-gray-800"
+          >
+            Редактировать
+          </Link>
+        )}
       </div>
 
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6">
@@ -77,17 +66,7 @@ export default function InventoryDetails({ user }) {
             )}
           </div>
           <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold">{title}</h1>
-              {canEdit && (
-                <button
-                  onClick={() => setEditOpen(true)}
-                  className="px-3 py-1.5 rounded-lg border hover:bg-gray-50 dark:hover:bg-gray-800"
-                >
-                  Редактировать
-                </button>
-              )}
-            </div>
+            <h1 className="text-2xl font-semibold">{title}</h1>
             <p className="mt-2 text-gray-600 dark:text-gray-400">{item?.description || 'Нет описания'}</p>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -104,22 +83,6 @@ export default function InventoryDetails({ user }) {
           </div>
         </div>
       </div>
-
-      {/* Модалка редактирования — только если есть права */}
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Редактировать инвентаризацию">
-        <InventoryForm
-          submitText={saving ? 'Сохраняем…' : 'Сохранить'}
-          initial={{
-            name: item?.name || item?.title || '',
-            description: item?.description || '',
-            cover: item?.cover || item?.image || '',
-            tags: Array.isArray(item?.tags) ? item.tags.join(', ') : '',
-          }}
-          onSubmit={handleUpdate}
-          onCancel={() => setEditOpen(false)}
-        />
-        {/* Примечание: PUT доступен только владельцу/админу; иначе будет 403 */}
-      </Modal>
     </div>
   );
 }

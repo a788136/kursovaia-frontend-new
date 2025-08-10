@@ -1,3 +1,4 @@
+// src/App.jsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import http from './api/http';
@@ -5,8 +6,9 @@ import { setToken, getToken, clearToken } from './api/token';
 import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
 import ProfilePage from './pages/ProfilePage';
-import AllInventories from './pages/AllInventories'; // ⬅️ НОВОЕ
+import AllInventories from './pages/AllInventories';
 import InventoryDetails from './pages/InventoryDetails';
+import InventoryEdit from './pages/InventoryEdit';
 
 function ProtectedRoute({ isAuthed, children }) {
   if (!isAuthed) return <Navigate to="/" replace />;
@@ -29,7 +31,6 @@ export default function App() {
       if (token) {
         setToken(token);
         history.replaceState(null, '', '/');
-        // после OAuth сразу на домашнюю
         navigate('/', { replace: true });
       }
     }
@@ -101,8 +102,18 @@ export default function App() {
             />
           } />
 
-          {/* НОВОЕ: страница со списком инвентаризаций */}
+          {/* Список */}
           <Route path="/inventories" element={<AllInventories />} />
+
+          {/* Страница инвентаризации */}
+          <Route path="/inventories/:id" element={<InventoryDetails user={user} />} />
+
+          {/* Отдельная страница редактирования */}
+          <Route path="/inventories/:id/edit" element={
+            <ProtectedRoute isAuthed={!!user}>
+              <InventoryEdit user={user} />
+            </ProtectedRoute>
+          } />
 
           <Route path="/profile" element={
             <ProtectedRoute isAuthed={!!user}>
@@ -112,8 +123,6 @@ export default function App() {
 
           {/* Фолбэк */}
           <Route path="*" element={<Navigate to="/" replace />} />
-          <Route path="/inventories" element={<AllInventories />} />
-          <Route path="/inventories/:id" element={<InventoryDetails user={user} />} /> 
         </Routes>
       </main>
     </div>

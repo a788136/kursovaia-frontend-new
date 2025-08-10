@@ -1,5 +1,4 @@
 // src/pages/AllInventories.jsx
-// src/pages/AllInventories.jsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { inventoryService } from '../services/inventoryService';
@@ -163,7 +162,7 @@ export default function AllInventories() {
         </table>
       </div>
 
-      {/* Модалка Создания */}
+      {/* Модалка только для СОЗДАНИЯ */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Создать инвентаризацию">
         <InventoryForm
           submitText={creating ? 'Создаём…' : 'Создать'}
