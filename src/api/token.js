@@ -1,18 +1,23 @@
-let inMemory = null;
+// src/api/token.js
+// Единая точка для работы с JWT accessToken в localStorage.
 
-export function setToken(t) {
-  inMemory = t || null;
-  try { localStorage.setItem('accessToken', inMemory || ''); } catch {}
-}
+const KEY = 'accessToken';
+
 export function getToken() {
-  if (inMemory) return inMemory;
   try {
-    const t = localStorage.getItem('accessToken') || '';
-    inMemory = t || null;
-    return inMemory;
-  } catch { return null; }
+    return localStorage.getItem(KEY) || '';
+  } catch {
+    return '';
+  }
 }
+
+export function setToken(token) {
+  try {
+    if (token) localStorage.setItem(KEY, token);
+    else localStorage.removeItem(KEY);
+  } catch {}
+}
+
 export function clearToken() {
-  inMemory = null;
-  try { localStorage.removeItem('accessToken'); } catch {}
+  try { localStorage.removeItem(KEY); } catch {}
 }

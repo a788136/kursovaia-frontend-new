@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { inventoryService } from '../services/inventoryService';
 import InventoryForm from '../components/InventoryForm';
 import Modal from '../components/Modal';
+import { getToken as getAccessToken } from '../api/token'; // ← используем единый источник токена
 
 /* ================= i18n ================= */
 const MESSAGES = {
@@ -56,11 +57,6 @@ function useI18n(langProp, tProp) {
 }
 
 /* ================ helpers ================ */
-
-// JWT (если позже переключишься на контекст — замени здесь)
-function getToken() {
-  try { return localStorage.getItem('token') || ''; } catch { return ''; }
-}
 
 // Нормализация записи
 function normalizeInventory(raw) {
@@ -200,7 +196,7 @@ export default function AllInventories(props) {
     setCreating(true);
     setError('');
     try {
-      const token = getToken();
+      const token = getAccessToken(); // ← правильный токен
       const created = await inventoryService.create(payload, token);
       setRows((prev) => [normalizeInventory(created), ...prev]);
       setShowCreate(false);
@@ -219,7 +215,7 @@ export default function AllInventories(props) {
 
   /* ================ UI ================ */
 
-  // Общая сетка колонок (ширины можно подправить по вкусу)
+  // Общая сетка колонок
   const GRID_COLS = '4rem 2fr 1.2fr 3fr 1.1fr';
 
   // skeleton
