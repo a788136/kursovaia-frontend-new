@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+// src/pages/InventoryDetails.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { getInventoryById } from "../services/inventories";
+import { inventoryService } from "../services/inventoryService";
 import Tabs from "../components/ui/Tabs";
 import ItemsTab from "../components/inventory/ItemsTab";
 import ChatTab from "../components/inventory/ChatTab";
@@ -25,79 +27,134 @@ const TAB_VALUES = [
 export default function InventoryDetails() {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [inventory, setInventory] = useState(null);
 
   const activeTab = useMemo(() => {
-    const q = searchParams.get("tab");
-    return TAB_VALUES.some(t => t.value === q) ? q : "items";
+    const t = searchParams.get("tab");
+    return TAB_VALUES.some((x) => x.value === t) ? t : "items";
   }, [searchParams]);
 
-  const onTabChange = (nextValue) => {
+  function setTab(value) {
     const next = new URLSearchParams(searchParams);
-    next.set("tab", nextValue);
+    next.set("tab", value);
     setSearchParams(next, { replace: true });
-  };
+  }
 
   useEffect(() => {
-    let ignore = false;
-    setLoading(true);
-    setError("");
-    getInventoryById(id)
-      .then((data) => {
-        if (ignore) return;
-        setInventory(data);
-      })
-      .catch((e) => {
-        if (ignore) return;
-        setError(e?.message || "Failed to load inventory");
-      })
-      .finally(() => {
-        if (ignore) return;
-        setLoading(false);
-      });
-    return () => {
-      ignore = true;
-    };
+    let dead = false;
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const inv = await getInventoryById(id);
+        if (!dead) setInventory(inv);
+      } catch (e) {
+        if (!dead) setError(e?.message || "Failed to load");
+      } finally {
+        if (!dead) setLoading(false);
+      }
+    })();
+    return () => { dead = true; };
   }, [id]);
 
-  const title = inventory?.name || `Inventory ${id}`;
+  // Пример значений для предпросмотра блока "Поле" в Custom ID
+  const sampleFields = useMemo(() => ({
+    brand: "ACME",
+    model: "Z-500",
+    year: "2025",
+  }), []);
+
+  async function handleSaveFields(nextFields) {
+    if (!inventory?._id) return;
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await inventoryService.update(inventory._id, { fields: nextFields });
+      setInventory((prev) => ({ ...(prev || {}), fields: updated.fields || nextFields }));
+      alert("Поля сохранены");
+    } catch (e) {
+      setError(e?.message || "Не удалось сохранить поля");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveCustomId(nextCfg) {
+    if (!inventory?._id) return;
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await inventoryService.update(inventory._id, { customIdFormat: nextCfg });
+      setInventory((prev) => ({ ...(prev || {}), customIdFormat: updated.customIdFormat || nextCfg }));
+      alert("Custom ID сохранён");
+    } catch (e) {
+      setError(e?.message || "Не удалось сохранить Custom ID");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <Link to="/inventories" className="text-sm opacity-70 hover:opacity-100">← Back</Link>
-        <h1 className="text-2xl font-semibold">{title}</h1>
+    <div className="container mx-auto max-w-6xl px-4 py-6">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Link to="/inventories" className="text-sm text-blue-600 hover:underline">
+            &larr; All inventories
+          </Link>
+          {inventory && <div className="text-xl font-semibold">{inventory.name || "Untitled inventory"}</div>}
+        </div>
+        <div className="text-sm opacity-70">
+          {saving ? "Saving…" : loading ? "Loading…" : null}
+        </div>
       </div>
 
-      {loading && (
-        <div className="animate-pulse p-4 rounded-2xl border">
-          Loading inventory…
-        </div>
-      )}
-
       {error && (
-        <div className="p-4 rounded-2xl border border-red-300 bg-red-50 text-red-800">
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-red-700">
           {error}
         </div>
       )}
 
-      {!loading && !error && (
-        <>
-          <Tabs tabs={TAB_VALUES} value={activeTab} onChange={onTabChange} />
+      <Tabs tabs={TAB_VALUES} value={activeTab} onChange={setTab} />
 
-          <div className="mt-4">
-            {activeTab === "items" && <ItemsTab inventory={inventory} />}
-            {activeTab === "chat" && <ChatTab inventory={inventory} />}
-            {activeTab === "settings" && <SettingsTab inventory={inventory} />}
-            {activeTab === "custom-id" && <CustomIdTab inventory={inventory} />}
-            {activeTab === "fields" && <FieldsTab inventory={inventory} />}
-            {activeTab === "access" && <AccessTab inventory={inventory} />}
-            {activeTab === "stats" && <StatsTab inventory={inventory} />}
-            {activeTab === "export" && <ExportTab inventory={inventory} />}
-          </div>
-        </>
+      {loading ? (
+        <div className="mt-6 text-sm opacity-70">Loading inventory…</div>
+      ) : !inventory ? (
+        <div className="mt-6 text-sm text-red-700">Inventory not found.</div>
+      ) : (
+        <div className="mt-6">
+          {activeTab === "items" && <ItemsTab inventory={inventory} />}
+          {activeTab === "chat" && <ChatTab inventory={inventory} />}
+          {activeTab === "settings" && <SettingsTab inventory={inventory} />}
+
+          {activeTab === "custom-id" && (
+            <CustomIdTab
+              value={inventory.customIdFormat || { enabled: true, separator: "-", elements: [] }}
+              onChange={(cfg) => setInventory((prev) => ({ ...(prev || {}), customIdFormat: cfg }))}
+              onSave={handleSaveCustomId}
+              disabled={saving}
+              sampleFields={sampleFields}
+              inventory={inventory}
+            />
+          )}
+
+          {activeTab === "fields" && (
+            <FieldsTab
+              value={inventory.fields || []}
+              onChange={(next) => setInventory((prev) => ({ ...(prev || {}), fields: next }))}
+              onSave={handleSaveFields}
+              disabled={saving}
+              inventory={inventory}
+            />
+          )}
+
+          {activeTab === "access" && <AccessTab inventory={inventory} />}
+          {activeTab === "stats" && <StatsTab inventory={inventory} />}
+          {activeTab === "export" && <ExportTab inventory={inventory} />}
+        </div>
       )}
     </div>
   );
