@@ -1,9 +1,12 @@
+// src/pages/HomePage.jsx
 import React from 'react';
 import Login from '../components/Login';
 import AllInventories from './AllInventories';
 
 export default function HomePage({ user, lang, t, onLoggedIn }) {
-  // Неавторизован: приветствие + логин, а НИЖЕ — список инвентаризаций
+  const isRu = (lang || 'ru') === 'ru';
+
+  // Неавторизован: приветствие + логин, ниже – список инвентаризаций
   if (!user) {
     return (
       <div className="space-y-8">
@@ -15,24 +18,26 @@ export default function HomePage({ user, lang, t, onLoggedIn }) {
           <Login onLoggedIn={onLoggedIn} lang={lang} />
         </div>
 
-        {/* Таблица инвентаризаций на главной */}
-        <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800">
+        {/* Секция со списком инвентаризаций */}
+        {/* <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800">
           <h2 className="text-xl font-semibold mb-4">
-            {lang === 'ru' ? 'Все инвентаризации' : 'All inventories'}
-          </h2>
-          <AllInventories />
-        </section>
+            {isRu ? 'Все инвентаризации' : 'All inventories'}
+          </h2> */}
+          {/* Передаём lang и t, чтобы работал i18n внутри AllInventories */}
+          {/* <AllInventories lang={lang} t={t} />
+        </section> */}
       </div>
     );
   }
 
-  // Авторизован: сразу показываем таблицу
+  // Авторизован: сразу показываем список
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800">
       <h1 className="text-2xl font-semibold mb-4">
-        {lang === 'ru' ? 'Инвентаризации' : 'Inventories'}
+        {isRu ? 'Инвентаризации' : 'Inventories'}
       </h1>
-      <AllInventories />
+      {/* Также пробрасываем lang и t */}
+      <AllInventories lang={lang} t={t} />
     </section>
   );
 }
