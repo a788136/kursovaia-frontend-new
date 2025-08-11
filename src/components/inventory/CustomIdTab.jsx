@@ -1,269 +1,367 @@
-import React, { useEffect, useMemo, useState } from 'react';
+// src/components/inventory/CustomIdTab.jsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
-const PALETTE = [
-  { type: 'text', label: 'Текст (фикс.)', defaults: { value: 'INV' } },
-  { type: 'date', label: 'Дата', defaults: { format: 'YYYYMMDD' } },
-  { type: 'seq', label: 'Счётчик', defaults: { pad: 4, scope: 'inventory' } },
-  { type: 'guid', label: 'GUID', defaults: {} },
-  { type: 'rand32', label: 'Случайное 32‑бит', defaults: {} },
-  { type: 'rand6', label: 'Случайное 6 цифр', defaults: {} },
-  { type: 'rand9', label: 'Случайное 9 цифр', defaults: {} },
-  { type: 'field', label: 'Поле (значение)', defaults: { key: '' } },
+/**
+ * Schema we use here:
+ * value = {
+ *   enabled: true,
+ *   elements: [
+ *     { id, type: 'fixed', value: '📚-' },
+ *     { id, type: 'rand20', fmt: 'X5_' },   // X5_ (5-hex) или D6_ (6-цифр)
+ *     { id, type: 'seq',   fmt: 'D3_' },    // D3_ (3 цифры с ведущими нулями) или D (без нулей)
+ *     { id, type: 'date',  fmt: 'yyyy' }    // формат даты
+ *   ]
+ * }
+ */
+
+const TYPE_OPTIONS = [
+  { value: "fixed", label: "Fixed" },
+  { value: "rand20", label: "20‑bit random" },
+  { value: "seq", label: "Sequence" },
+  { value: "date", label: "Date/time" },
 ];
 
-const uid = () => Math.random().toString(36).slice(2, 9);
+const DESCR = {
+  fixed: "A piece of unchanging text. E.g., you can use Unicode emoji.",
+  rand20:
+    "A random value. E.g., format as a six‑digit decimal (D6) or 5‑digit hex (X5).",
+  seq: "A sequential index. E.g., format with leading zeros (D4) or without them (D).",
+  date:
+    "An item creation date and time. E.g., use an abbreviated day of the week (ddd).",
+};
 
-function nowFormatted(fmt) {
+function uid() {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+function normalizeInitial(val) {
+  // Поддержка старых схем из ранней версии
+  if (!val) return { enabled: true, elements: [] };
+  const elements = (val.elements || []).map((el) => {
+    if (el.type === "text") return { id: el.id || uid(), type: "fixed", value: el.value || "" };
+    if (el.type === "rand32") return { id: el.id || uid(), type: "rand20", fmt: "X5_" };
+    if (el.type === "seq")
+      return { id: el.id || uid(), type: "seq", fmt: el.pad ? `D${el.pad}` : "D" };
+    if (el.type === "date") return { id: el.id || uid(), type: "date", fmt: el.format || "yyyy" };
+    return { id: el.id || uid(), ...el };
+  });
+  return { enabled: !!val.enabled, elements };
+}
+
+/* ---------- helpers to preview ---------- */
+
+function hexFrom20bit() {
+  // 20 бит = 5 hex-символов
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] & 0xFFFFF;
+  return n.toString(16).toUpperCase().padStart(5, "0");
+}
+function decFrom20bit(len = 6) {
+  // 20 бит максимум ~ 1,048,575 => до 6 десятичных знаков
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] & 0xFFFFF;
+  return String(n).padStart(len, "0").slice(0, len);
+}
+function seqPreview(fmt = "D3") {
+  const m = /^D(\d+)?$/.exec(fmt);
+  if (!m) return "1";
+  const pad = Number(m[1] || 0);
+  return pad > 0 ? String(13).padStart(pad, "0") : "13";
+}
+function datePreview(fmt = "yyyy") {
   const d = new Date();
-  const YYYY = String(d.getFullYear());
-  const MM = String(d.getMonth() + 1).padStart(2, '0');
-  const DD = String(d.getDate()).padStart(2, '0');
-  return (fmt || 'YYYYMMDD').replace('YYYY', YYYY).replace('MM', MM).replace('DD', DD);
+  const map = {
+    yyyy: d.getFullYear().toString(),
+    yy: d.getFullYear().toString().slice(-2),
+    MM: String(d.getMonth() + 1).padStart(2, "0"),
+    M: String(d.getMonth() + 1),
+    dd: String(d.getDate()).padStart(2, "0"),
+    d: String(d.getDate()),
+    ddd: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()],
+  };
+  let out = fmt;
+  // простая замена популярных токенов
+  for (const [k, v] of Object.entries(map)) out = out.replaceAll(k, v);
+  return out;
 }
-function genGuid() {
-  return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) =>
-    (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & 15) >> (c / 4)).toString(16)
-  );
-}
-const randDigits = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join('');
-function rand32() {
-  const u = new Uint32Array(1); crypto.getRandomValues(u); return String(u[0]);
+function rand20Preview(fmt = "X5_") {
+  if (/^X5_?$/i.test(fmt)) return hexFrom20bit() + (fmt.endsWith("_") ? "_" : "");
+  const m = /^D(\d+)_?$/i.exec(fmt);
+  if (m) return decFrom20bit(Number(m[1] || 6)) + (fmt.endsWith("_") ? "_" : "");
+  return hexFrom20bit();
 }
 
-function ElementCard({ el, onChange, onRemove, onDragStart, onDragOver, onDrop }) {
+function renderPreview(elements) {
+  const parts = [];
+  for (const el of elements || []) {
+    switch (el.type) {
+      case "fixed":
+        parts.push(el.value || "");
+        break;
+      case "rand20":
+        parts.push(rand20Preview(el.fmt || "X5_"));
+        break;
+      case "seq":
+        parts.push(seqPreview(el.fmt || "D3_") + (/_$/.test(el.fmt || "") ? "" : ""));
+        break;
+      case "date":
+        parts.push(datePreview(el.fmt || "yyyy"));
+        break;
+      default:
+        parts.push("");
+    }
+  }
+  return parts.join("");
+}
+
+/* ---------- Row component ---------- */
+
+function Row({
+  el,
+  onChange,
+  onRemove,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  idx,
+}) {
+  const [showHelp, setShowHelp] = useState(false);
+
   return (
     <div
+      className="rounded-2xl border bg-white dark:bg-zinc-900 shadow-sm p-3"
       draggable
       onDragStart={onDragStart}
-      onDragOver={(e) => { e.preventDefault(); onDragOver?.(e); }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        onDragOver?.(e);
+      }}
       onDrop={onDrop}
-      style={{ border: '1px solid #ddd', borderRadius: 12, padding: 12 }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <div style={{ fontWeight: 600 }}>{PALETTE.find(p => p.type === el.type)?.label || el.type}</div>
-        <button type="button" onClick={onRemove} style={{ color: '#b00020' }}>Удалить</button>
-      </div>
-      {renderControls(el, onChange)}
-    </div>
-  );
-}
+      <div className="flex items-center gap-2">
+        {/* drag handle */}
+        <button
+          type="button"
+          className="cursor-grab text-zinc-500 px-2"
+          title="Drag to reorder"
+        >
+          ↕
+        </button>
 
-function renderControls(el, onChange) {
-  switch (el.type) {
-    case 'text':
-      return (
-        <div>
-          <label style={{ fontSize: 12, color: '#666' }}>Текст</label>
-          <input value={el.value || ''} onChange={(e) => onChange({ ...el, value: e.target.value })} style={{ width: '100%' }} />
-        </div>
-      );
-    case 'date':
-      return (
-        <div>
-          <label style={{ fontSize: 12, color: '#666' }}>Формат (YYYY, YYYYMM, YYYYMMDD, ...)</label>
-          <input value={el.format || 'YYYYMMDD'} onChange={(e) => onChange({ ...el, format: e.target.value })} style={{ width: '100%' }} />
-        </div>
-      );
-    case 'seq':
-      return (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <div>
-            <label style={{ fontSize: 12, color: '#666' }}>Длина (pad)</label>
-            <input
-              type="number"
-              min={1}
-              max={12}
-              value={el.pad || 4}
-              onChange={(e) => onChange({ ...el, pad: Math.max(1, Math.min(12, Number(e.target.value) || 1)) })}
-              style={{ width: '100%' }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: 12, color: '#666' }}>Область</label>
-            <select value={el.scope || 'inventory'} onChange={(e) => onChange({ ...el, scope: e.target.value })} style={{ width: '100%' }}>
-              <option value="inventory">Для инвентаризации</option>
-              <option value="global">Глобально</option>
-            </select>
-          </div>
-        </div>
-      );
-    case 'field':
-      return (
-        <div>
-          <label style={{ fontSize: 12, color: '#666' }}>Ключ поля</label>
+        {/* type select */}
+        <select
+          className="rounded-xl border px-3 py-2 min-w-[180px]"
+          value={el.type}
+          onChange={(e) => {
+            const t = e.target.value;
+            if (t === "fixed") onChange({ id: el.id, type: t, value: "" });
+            if (t === "rand20") onChange({ id: el.id, type: t, fmt: "X5_" });
+            if (t === "seq") onChange({ id: el.id, type: t, fmt: "D3_" });
+            if (t === "date") onChange({ id: el.id, type: t, fmt: "yyyy" });
+          }}
+        >
+          {TYPE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+
+        {/* value / fmt input */}
+        {el.type === "fixed" ? (
           <input
-            value={el.key || ''}
-            onChange={(e) => onChange({ ...el, key: e.target.value })}
-            placeholder="например, brand"
-            style={{ width: '100%' }}
+            className="flex-1 rounded-xl border px-3 py-2"
+            placeholder="e.g. 📚-"
+            value={el.value || ""}
+            onChange={(e) => onChange({ ...el, value: e.target.value })}
           />
-          <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
-            В предпросмотре подставится значение из «Пример полей» справа.
-          </div>
-        </div>
-      );
-    default:
-      return <div style={{ fontSize: 12, color: '#666' }}>Без параметров</div>;
-  }
-}
+        ) : (
+          <input
+            className="flex-1 rounded-xl border px-3 py-2"
+            placeholder={
+              el.type === "rand20"
+                ? "X5_ or D6_"
+                : el.type === "seq"
+                ? "D3_ or D"
+                : "yyyy"
+            }
+            value={el.fmt || ""}
+            onChange={(e) => onChange({ ...el, fmt: e.target.value })}
+          />
+        )}
 
-function previewSample(format, sampleFields) {
-  if (!format || !Array.isArray(format.elements)) return '';
-  const parts = [];
-  for (const el of format.elements) {
-    switch (el.type) {
-      case 'text': parts.push(el.value || ''); break;
-      case 'date': parts.push(nowFormatted(el.format)); break;
-      case 'seq': parts.push(String(1).padStart(el.pad || 4, '0')); break;
-      case 'guid': parts.push(genGuid()); break;
-      case 'rand32': parts.push(rand32()); break;
-      case 'rand6': parts.push(randDigits(6)); break;
-      case 'rand9': parts.push(randDigits(9)); break;
-      case 'field': parts.push(sampleFields?.[el.key] ?? `{${el.key || 'field'}}`); break;
-      default: parts.push('');
-    }
-    if (format.separator && el !== format.elements[format.elements.length - 1]) parts.push(format.separator);
-  }
-  return parts.join('');
-}
+        {/* emoji quick insert for Fixed */}
+        <button
+          type="button"
+          className="rounded-xl border px-2 py-2"
+          title="Insert emoji"
+          onClick={() =>
+            el.type === "fixed" &&
+            onChange({ ...el, value: (el.value || "") + "📚" })
+          }
+        >
+          😊
+        </button>
 
-function KeyValueEditor({ value, onChange, readOnly }) {
-  const [pairs, setPairs] = useState(() => Object.entries(value || {}));
-  useEffect(() => { setPairs(Object.entries(value || {})); }, [value]);
-  const update = (i, k, v) => {
-    const next = pairs.map((p, idx) => (idx === i ? [k, v] : p));
-    setPairs(next); onChange?.(Object.fromEntries(next));
-  };
-  const add = () => {
-    const next = [...pairs, ['', '']]; setPairs(next); onChange?.(Object.fromEntries(next));
-  };
-  const remove = (i) => {
-    const next = pairs.filter((_, idx) => idx !== i); setPairs(next); onChange?.(Object.fromEntries(next));
-  };
-  return (
-    <div style={{ display: 'grid', gap: 8 }}>
-      {pairs.map(([k, v], i) => (
-        <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8 }}>
-          <input value={k} onChange={(e) => update(i, e.target.value, v)} readOnly={readOnly} placeholder="ключ" />
-          <input value={v} onChange={(e) => update(i, k, e.target.value)} readOnly={readOnly} placeholder="значение" />
-          {!readOnly && <button type="button" onClick={() => remove(i)} style={{ color: '#b00020' }}>×</button>}
-        </div>
-      ))}
-      {!readOnly && <button type="button" onClick={add}>+ Пара</button>}
+        {/* help */}
+        <button
+          type="button"
+          className="rounded-xl border px-2 py-2"
+          title="Help"
+          onClick={() => setShowHelp((s) => !s)}
+        >
+          ?
+        </button>
+
+        {/* remove */}
+        <button
+          type="button"
+          className="text-red-600 px-2"
+          onClick={onRemove}
+          title="Delete"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* description/help */}
+      <div className="mt-2 text-sm text-zinc-500">
+        {DESCR[el.type]}
+        {showHelp && (
+          <span className="ml-2 italic opacity-80">
+            {el.type === "rand20"
+              ? "X5 = 5 hex chars (20‑bit). D6 = 6 digits (with leading zeros). Optional trailing '_' to add underscore."
+              : el.type === "seq"
+              ? "Use D + digits for left‑padded decimal (e.g., D4). Plain 'D' for no padding."
+              : el.type === "date"
+              ? "Common tokens: yyyy, yy, MM, dd, ddd."
+              : "Free text; emoji allowed."}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
 
-export default function CustomIDTab({ value, onChange, onSave, disabled, sampleFields }) {
+/* ---------- Main component ---------- */
+
+export default function CustomIdTab({
+  value,
+  onChange,
+  onSave,
+  disabled,
+  sampleFields, // не используется здесь, но оставил совместимость с вызовом
+}) {
+  const [cfg, setCfg] = useState(() => normalizeInitial(value));
   const [dragIdx, setDragIdx] = useState(null);
-  const cfg = value || { enabled: true, separator: '-', elements: [] };
+  const [savingState, setSavingState] = useState("idle"); // 'idle' | 'saving' | 'saved'
+  const saveTimer = useRef(null);
 
-  const addElement = (type) => {
-    const def = PALETTE.find((p) => p.type === type)?.defaults || {};
-    onChange?.({ ...cfg, elements: [...(cfg.elements || []), { id: uid(), type, ...def }] });
-  };
-  const updateAt = (i, patch) => {
-    const next = [...cfg.elements]; next[i] = patch; onChange?.({ ...cfg, elements: next });
-  };
-  const removeAt = (i) => onChange?.({ ...cfg, elements: cfg.elements.filter((_, idx) => idx !== i) });
-
-  const errors = useMemo(() => {
-    const errs = [];
-    (cfg.elements || []).forEach((el, i) => {
-      if (el.type === 'text' && !('value' in el)) errs.push(`Элемент #${i + 1}: пустой текст`);
-      if (el.type === 'field' && !el.key) errs.push(`Элемент #${i + 1}: не указан ключ поля`);
-      if (el.type === 'seq' && (el.pad || 0) <= 0) errs.push(`Элемент #${i + 1}: длина счётчика должна быть > 0`);
+  // sync external value
+  useEffect(() => {
+    setCfg((prev) => {
+      // если снаружи пришло то же — не трогаем
+      const ext = JSON.stringify(value || {});
+      const cur = JSON.stringify(prev || {});
+      if (ext === cur) return prev;
+      return normalizeInitial(value);
     });
-    return errs;
-  }, [cfg]);
+  }, [value]);
 
-  const preview = useMemo(() => previewSample(cfg, sampleFields), [cfg, sampleFields]);
+  // propagate up onChange
+  useEffect(() => {
+    onChange?.(cfg);
+    // авто‑сохранение с дебаунсом
+    if (onSave) {
+      setSavingState("saving");
+      clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(async () => {
+        try {
+          await onSave(cfg);
+          setSavingState("saved");
+          setTimeout(() => setSavingState("idle"), 1200);
+        } catch {
+          setSavingState("idle");
+        }
+      }, 700);
+    }
+    return () => clearTimeout(saveTimer.current);
+  }, [cfg]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function updateAt(i, patch) {
+    const next = [...cfg.elements];
+    next[i] = patch;
+    setCfg({ ...cfg, elements: next });
+  }
+  function removeAt(i) {
+    setCfg({ ...cfg, elements: cfg.elements.filter((_, idx) => idx !== i) });
+  }
+  function addElement() {
+    setCfg({
+      ...cfg,
+      elements: [...cfg.elements, { id: uid(), type: "fixed", value: "" }],
+    });
+  }
+
+  const preview = useMemo(() => renderPreview(cfg.elements), [cfg.elements]);
 
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 8 }}>
-        {PALETTE.map((p) => (
-          <button key={p.type} type="button" disabled={disabled} onClick={() => addElement(p.type)} title="Добавить элемент">
-            {p.label}
-          </button>
+    <div className="space-y-5">
+      {/* Header with saved state */}
+      <div className="flex items-center justify-between">
+        <div className="text-2xl font-semibold">Custom ID</div>
+        {savingState === "saved" && (
+          <span className="text-xs rounded-full bg-green-100 text-green-700 px-3 py-1">
+            All changes saved
+          </span>
+        )}
+        {savingState === "saving" && (
+          <span className="text-xs rounded-full bg-amber-100 text-amber-700 px-3 py-1">
+            Saving…
+          </span>
+        )}
+      </div>
+
+      <p className="text-sm text-zinc-600">
+        You can set up items with inventory numbers in your preferred format.
+        To create a format, add new elements, edit them, drag to reorder, or
+        drag elements out of the form to delete them.
+      </p>
+
+      <div className="text-sm">
+        <span className="opacity-60 mr-2">Example:</span>
+        <span className="font-mono text-lg break-all">{preview || "—"}</span>
+      </div>
+
+      <div className="grid gap-3">
+        {cfg.elements.map((el, i) => (
+          <Row
+            key={el.id || i}
+            el={el}
+            idx={i}
+            onChange={(nel) => updateAt(i, nel)}
+            onRemove={() => removeAt(i)}
+            onDragStart={() => setDragIdx(i)}
+            onDragOver={() => {}}
+            onDrop={() => {
+              if (dragIdx == null || dragIdx === i) return;
+              const next = [...cfg.elements];
+              const [m] = next.splice(dragIdx, 1);
+              next.splice(i, 0, m);
+              setDragIdx(null);
+              setCfg({ ...cfg, elements: next });
+            }}
+          />
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div style={{ display: 'grid', gap: 8 }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <label>Разделитель</label>
-            <input
-              value={cfg.separator || ''}
-              onChange={(e) => onChange?.({ ...cfg, separator: e.target.value })}
-              placeholder="- или _"
-              style={{ width: 120 }}
-            />
-            <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginLeft: 8, fontSize: 14 }}>
-              <input
-                type="checkbox"
-                checked={!!cfg.enabled}
-                onChange={(e) => onChange?.({ ...cfg, enabled: e.target.checked })}
-              />
-              Активно
-            </label>
-          </div>
-
-          {(cfg.elements || []).length ? (
-            <div style={{ display: 'grid', gap: 8 }}>
-              {cfg.elements.map((el, i) => (
-                <ElementCard
-                  key={el.id || i}
-                  el={el}
-                  onChange={(nel) => updateAt(i, nel)}
-                  onRemove={() => removeAt(i)}
-                  onDragStart={() => setDragIdx(i)}
-                  onDragOver={() => {}}
-                  onDrop={() => {
-                    if (dragIdx == null || dragIdx === i) return;
-                    const next = [...cfg.elements];
-                    const [m] = next.splice(dragIdx, 1);
-                    next.splice(i, 0, m);
-                    setDragIdx(null);
-                    onChange?.({ ...cfg, elements: next });
-                  }}
-                />
-              ))}
-            </div>
-          ) : (
-            <div style={{ fontSize: 14, color: '#666' }}>Добавьте элементы формата выше.</div>
-          )}
-        </div>
-
-        <div style={{ border: '1px solid #ddd', borderRadius: 12, padding: 12 }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Предпросмотр</div>
-          <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 20, wordBreak: 'break-all' }}>
-            {preview || '—'}
-          </div>
-
-          <div style={{ marginTop: 12 }}>
-            <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Пример полей (для блока «Поле»)</div>
-            <KeyValueEditor value={sampleFields} onChange={() => {}} readOnly />
-          </div>
-        </div>
-      </div>
-
-      {!!errors.length && (
-        <div style={{ border: '1px solid #f5c2c7', background: '#f8d7da', padding: 12, borderRadius: 8, color: '#842029' }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Проблемы:</div>
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {errors.map((e, i) => (
-              <li key={i}>{e}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <button type="button" onClick={() => onSave?.(cfg)} disabled={disabled || !!errors.length}>
-          Сохранить
+      <div>
+        <button
+          type="button"
+          className="rounded-xl border px-4 py-2 text-violet-600 hover:bg-violet-50"
+          onClick={addElement}
+          disabled={disabled}
+        >
+          Add element
         </button>
-        <div style={{ fontSize: 12, color: '#666' }}>HTML5 drag‑and‑drop. Предпросмотр локальный.</div>
       </div>
     </div>
   );
