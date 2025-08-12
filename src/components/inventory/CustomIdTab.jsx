@@ -37,35 +37,20 @@ function normalizeInitial(val) {
   const elements = (val.elements || []).map((el) => {
     const id = el.id || uid();
     switch (el.type) {
-      // legacy
-      case "text":
-        return { id, type: "fixed", value: el.value ?? "" };
-      case "rand32":
-        return { id, type: "rand20", fmt: "X5_" };
-
-      // current
-      case "fixed":
-        return { id, type: "fixed", value: el.value ?? "" };
-      case "rand20":
-        return { id, type: "rand20", fmt: el.fmt ?? "X5_" };
-      case "seq": {
-        const fmt = el.fmt ?? (el.pad ? `D${el.pad}` : "D");
-        return { id, type: "seq", fmt };
-      }
-      case "date": {
-        const fmt = el.fmt ?? el.format ?? "yyyy";
-        return { id, type: "date", fmt };
-      }
-      default:
-        return { id, ...el };
+      case "text":   return { id, type: "fixed", value: el.value ?? "" };        // legacy
+      case "rand32": return { id, type: "rand20", fmt: "X5_" };                  // legacy
+      case "fixed":  return { id, type: "fixed", value: el.value ?? "" };
+      case "rand20": return { id, type: "rand20", fmt: el.fmt ?? "X5_" };
+      case "seq":    return { id, type: "seq",   fmt: el.fmt ?? (el.pad ? `D${el.pad}` : "D") };
+      case "date":   return { id, type: "date",  fmt: el.fmt ?? el.format ?? "yyyy" };
+      default:       return { id, ...el };
     }
   });
   return { enabled: !!val.enabled, elements };
 }
 
-/* ---------- helpers to preview (stable) ---------- */
+/* ---------- preview helpers (stable) ---------- */
 
-// Форматируем 20-битное число согласно fmt, не генеря новый рандом
 function formatRand20(base20, fmt = "X5_") {
   const suffix = fmt.endsWith("_") ? "_" : "";
   if (/^X5_?$/i.test(fmt)) {
@@ -76,16 +61,13 @@ function formatRand20(base20, fmt = "X5_") {
     const len = Number(m[1] || 6);
     return String(base20 >>> 0).padStart(len, "0").slice(0, len) + suffix;
   }
-  // дефолт — hex
   return (base20 >>> 0).toString(16).toUpperCase().padStart(5, "0") + suffix;
 }
 
-// Предпросмотр даты по ЗАФИКСИРОВАННОЙ sample-дате
 function datePreviewAt(d, fmt = "yyyy") {
   if (fmt == null) return "";
   const s = String(fmt);
-  // если нет токенов — вернуть как есть
-  if (!/[yMdHhms]/i.test(s)) return s;
+  if (!/[yMdHhms]/i.test(s)) return s; // нет токенов — вернуть как есть
 
   const map = {
     yyyy: d.getFullYear().toString(),
@@ -108,14 +90,14 @@ function seqPreview(fmt = "D3") {
   return pad > 0 ? String(13).padStart(pad, "0") : "13";
 }
 
-// Стабильный рендер превью: кэшируем base20 per element.id и фиксируем sample date
-function renderPreviewStable(elements, randCacheMap, sampleDate) {
+// Превью учитывает draft-ввод (если есть), кэш rand20 по id и фиксированную дату
+function renderPreviewStable(elements, drafts, randCacheMap, sampleDate) {
   const parts = [];
   for (const el of elements || []) {
+    const draft = drafts.get(el.id);
     switch (el.type) {
       case "fixed": {
-        parts.push(el.value ?? "");
-        // если тип не rand20 — чистим возможный мусор
+        parts.push((draft ?? el.value) ?? "");
         randCacheMap.delete(el.id);
         break;
       }
@@ -125,17 +107,20 @@ function renderPreviewStable(elements, randCacheMap, sampleDate) {
           randCacheMap.set(el.id, n);
         }
         const base = randCacheMap.get(el.id);
-        parts.push(formatRand20(base, el.fmt ?? "X5_"));
+        const fmt  = (draft ?? el.fmt) ?? "X5_";
+        parts.push(formatRand20(base, fmt));
         break;
       }
       case "seq": {
         randCacheMap.delete(el.id);
-        parts.push(seqPreview(el.fmt ?? "D3"));
+        const fmt = (draft ?? el.fmt) ?? "D3";
+        parts.push(seqPreview(fmt));
         break;
       }
       case "date": {
         randCacheMap.delete(el.id);
-        parts.push(datePreviewAt(sampleDate, el.fmt ?? "yyyy"));
+        const fmt = (draft ?? el.fmt) ?? "yyyy";
+        parts.push(datePreviewAt(sampleDate, fmt));
         break;
       }
       default: {
@@ -156,6 +141,7 @@ function Row({
   onDragStart,
   onDragOver,
   onDrop,
+  onDraftChange,     // NEW: сообщает текущий ввод наверх
 }) {
   const [showHelp, setShowHelp] = useState(false);
 
@@ -164,18 +150,21 @@ function Row({
   const [text, setText] = useState(toStr());
   const keyRef = useRef(`${el.id}|${el.type}`);
 
-  // синхронизация ТОЛЬКО при смене структуры (id/type)
+  // синхронизация только при смене структуры
   useEffect(() => {
     const nextKey = `${el.id}|${el.type}`;
     if (nextKey !== keyRef.current) {
       keyRef.current = nextKey;
-      setText(toStr());
+      const next = toStr();
+      setText(next);
+      onDraftChange?.(el.id, next);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [el.id, el.type]);
 
   function commit(v) {
     setText(v);
+    onDraftChange?.(el.id, v); // мгновенно влияет на Example
     if (el.type === "fixed") onChange({ ...el, value: v });
     else onChange({ ...el, fmt: v });
   }
@@ -204,10 +193,10 @@ function Row({
           value={el.type}
           onChange={(e) => {
             const t = e.target.value;
-            if (t === "fixed") { onChange({ id: el.id, type: t, value: "" }); setText(""); }
-            if (t === "rand20"){ onChange({ id: el.id, type: t, fmt: "X5_" }); setText("X5_"); }
-            if (t === "seq")   { onChange({ id: el.id, type: t, fmt: "D3"  }); setText("D3"); }
-            if (t === "date")  { onChange({ id: el.id, type: t, fmt: "yyyy"}); setText("yyyy"); }
+            if (t === "fixed") { onChange({ id: el.id, type: t, value: "" }); commit(""); }
+            if (t === "rand20"){ onChange({ id: el.id, type: t, fmt: "X5_" }); commit("X5_"); }
+            if (t === "seq")   { onChange({ id: el.id, type: t, fmt: "D3"  }); commit("D3"); }
+            if (t === "date")  { onChange({ id: el.id, type: t, fmt: "yyyy"}); commit("yyyy"); }
           }}
         >
           {TYPE_OPTIONS.map((o) => (
@@ -292,8 +281,9 @@ export default function CustomIdTab({
   const isComposingRef = useRef(false);
 
   // стабильные источники для превью
-  const randCacheRef = useRef(new Map());       // id -> base20
-  const sampleDateRef = useRef(new Date());     // фиксированная дата для превью
+  const randCacheRef = useRef(new Map());     // id -> base20
+  const sampleDateRef = useRef(new Date());   // фиксированная дата для превью
+  const draftsRef = useRef(new Map());        // id -> current input text
 
   // sync external value (строго по реальному отличию)
   useEffect(() => {
@@ -304,7 +294,7 @@ export default function CustomIdTab({
     });
   }, [value]);
 
-  // IME-гвард, чтобы не сейвить во время набора
+  // IME guard
   useEffect(() => {
     const onStart = () => { isComposingRef.current = true; };
     const onEnd   = () => { isComposingRef.current = false; };
@@ -322,7 +312,6 @@ export default function CustomIdTab({
 
     if (!onSave) return;
     clearTimeout(saveTimer.current);
-
     if (isComposingRef.current) return;
 
     saveTimer.current = setTimeout(async () => {
@@ -334,7 +323,7 @@ export default function CustomIdTab({
       } catch {
         setSavingState("idle");
       }
-    }, 8000); // строго 8 секунд
+    }, 8000);
     return () => clearTimeout(saveTimer.current);
   }, [cfg]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -344,20 +333,29 @@ export default function CustomIdTab({
     setCfg({ ...cfg, elements: next });
   }
   function removeAt(i) {
-    setCfg({ ...cfg, elements: cfg.elements.filter((_, idx) => idx !== i) });
-    // чистим кэш превью для удалённого элемента
     const removed = cfg.elements[i];
-    if (removed?.id) randCacheRef.current.delete(removed.id);
+    setCfg({ ...cfg, elements: cfg.elements.filter((_, idx) => idx !== i) });
+    if (removed?.id) {
+      randCacheRef.current.delete(removed.id);
+      draftsRef.current.delete(removed.id);
+    }
   }
   function addElement() {
+    const id = uid();
     setCfg({
       ...cfg,
-      elements: [...cfg.elements, { id: uid(), type: "fixed", value: "" }],
+      elements: [...cfg.elements, { id, type: "fixed", value: "" }],
     });
+    draftsRef.current.set(id, "");
   }
 
   const preview = useMemo(
-    () => renderPreviewStable(cfg.elements, randCacheRef.current, sampleDateRef.current),
+    () => renderPreviewStable(
+      cfg.elements,
+      draftsRef.current,
+      randCacheRef.current,
+      sampleDateRef.current
+    ),
     [cfg.elements]
   );
 
@@ -405,6 +403,10 @@ export default function CustomIdTab({
               next.splice(i, 0, m);
               setDragIdx(null);
               setCfg({ ...cfg, elements: next });
+            }}
+            onDraftChange={(id, v) => {
+              if (v === undefined) draftsRef.current.delete(id);
+              else draftsRef.current.set(id, v);
             }}
           />
         ))}
