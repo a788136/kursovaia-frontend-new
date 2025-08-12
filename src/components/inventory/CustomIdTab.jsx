@@ -8,7 +8,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
  *   elements: [
  *     { id, type: 'fixed', value: '📚-' },
  *     { id, type: 'rand20', fmt: 'X5_' },   // X5_ (5-hex) или D6_ (6-цифр)
- *     { id, type: 'seq',   fmt: 'D3_' },    // D3_ (3 цифры с ведущими нулями) или D (без нулей)
+ *     { id, type: 'seq',   fmt: 'D3'  },    // D3 (3 цифры с ведущими нулями) или D (без нулей)
  *     { id, type: 'date',  fmt: 'yyyy' }    // формат даты
  *   ]
  * }
@@ -16,7 +16,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const TYPE_OPTIONS = [
   { value: "fixed", label: "Fixed" },
-  { value: "rand20", label: "20‑bit random" },
+  { value: "rand20", label: "20-bit random" },
   { value: "seq", label: "Sequence" },
   { value: "date", label: "Date/time" },
 ];
@@ -24,7 +24,7 @@ const TYPE_OPTIONS = [
 const DESCR = {
   fixed: "A piece of unchanging text. E.g., you can use Unicode emoji.",
   rand20:
-    "A random value. E.g., format as a six‑digit decimal (D6) or 5‑digit hex (X5).",
+    "A random value. E.g., format as a six-digit decimal (D6) or 5-digit hex (X5).",
   seq: "A sequential index. E.g., format with leading zeros (D4) or without them (D).",
   date:
     "An item creation date and time. E.g., use an abbreviated day of the week (ddd).",
@@ -38,11 +38,10 @@ function normalizeInitial(val) {
   // Поддержка старых схем из ранней версии
   if (!val) return { enabled: true, elements: [] };
   const elements = (val.elements || []).map((el) => {
-    if (el.type === "text") return { id: el.id || uid(), type: "fixed", value: el.value || "" };
-    if (el.type === "rand32") return { id: el.id || uid(), type: "rand20", fmt: "X5_" };
-    if (el.type === "seq")
-      return { id: el.id || uid(), type: "seq", fmt: el.pad ? `D${el.pad}` : "D" };
-    if (el.type === "date") return { id: el.id || uid(), type: "date", fmt: el.format || "yyyy" };
+    if (el.type === "text")  return { id: el.id || uid(), type: "fixed", value: el.value || "" };
+    if (el.type === "rand32")return { id: el.id || uid(), type: "rand20", fmt: "X5_" };
+    if (el.type === "seq")   return { id: el.id || uid(), type: "seq", fmt: el.pad ? `D${el.pad}` : "D" };
+    if (el.type === "date")  return { id: el.id || uid(), type: "date", fmt: el.format || "yyyy" };
     return { id: el.id || uid(), ...el };
   });
   return { enabled: !!val.enabled, elements };
@@ -100,7 +99,7 @@ function renderPreview(elements) {
         parts.push(rand20Preview(el.fmt || "X5_"));
         break;
       case "seq":
-        parts.push(seqPreview(el.fmt || "D3_") + (/_$/.test(el.fmt || "") ? "" : ""));
+        parts.push(seqPreview(el.fmt || "D3"));
         break;
       case "date":
         parts.push(datePreview(el.fmt || "yyyy"));
@@ -121,7 +120,6 @@ function Row({
   onDragStart,
   onDragOver,
   onDrop,
-  idx,
 }) {
   const [showHelp, setShowHelp] = useState(false);
 
@@ -154,7 +152,7 @@ function Row({
             const t = e.target.value;
             if (t === "fixed") onChange({ id: el.id, type: t, value: "" });
             if (t === "rand20") onChange({ id: el.id, type: t, fmt: "X5_" });
-            if (t === "seq") onChange({ id: el.id, type: t, fmt: "D3_" });
+            if (t === "seq") onChange({ id: el.id, type: t, fmt: "D3" });
             if (t === "date") onChange({ id: el.id, type: t, fmt: "yyyy" });
           }}
         >
@@ -180,7 +178,7 @@ function Row({
               el.type === "rand20"
                 ? "X5_ or D6_"
                 : el.type === "seq"
-                ? "D3_ or D"
+                ? "D3 or D"
                 : "yyyy"
             }
             value={el.fmt || ""}
@@ -228,9 +226,9 @@ function Row({
         {showHelp && (
           <span className="ml-2 italic opacity-80">
             {el.type === "rand20"
-              ? "X5 = 5 hex chars (20‑bit). D6 = 6 digits (with leading zeros). Optional trailing '_' to add underscore."
+              ? "X5 = 5 hex chars (20-bit). D6 = 6 digits (with leading zeros). Optional trailing '_' to add underscore."
               : el.type === "seq"
-              ? "Use D + digits for left‑padded decimal (e.g., D4). Plain 'D' for no padding."
+              ? "Use D + digits for left-padded decimal (e.g., D4). Plain 'D' for no padding."
               : el.type === "date"
               ? "Common tokens: yyyy, yy, MM, dd, ddd."
               : "Free text; emoji allowed."}
@@ -248,17 +246,16 @@ export default function CustomIdTab({
   onChange,
   onSave,
   disabled,
-  sampleFields, // не используется здесь, но оставил совместимость с вызовом
 }) {
   const [cfg, setCfg] = useState(() => normalizeInitial(value));
   const [dragIdx, setDragIdx] = useState(null);
   const [savingState, setSavingState] = useState("idle"); // 'idle' | 'saving' | 'saved'
   const saveTimer = useRef(null);
+  const isComposingRef = useRef(false);
 
-  // sync external value
+  // sync external value (избегаем лишних ресетов по deep-равенству)
   useEffect(() => {
     setCfg((prev) => {
-      // если снаружи пришло то же — не трогаем
       const ext = JSON.stringify(value || {});
       const cur = JSON.stringify(prev || {});
       if (ext === cur) return prev;
@@ -266,23 +263,39 @@ export default function CustomIdTab({
     });
   }, [value]);
 
-  // propagate up onChange
+  // глобально отслеживаем составной ввод (IME), чтобы не сохранять во время набора
+  useEffect(() => {
+    const onStart = () => { isComposingRef.current = true; };
+    const onEnd   = () => { isComposingRef.current = false; };
+    window.addEventListener("compositionstart", onStart);
+    window.addEventListener("compositionend", onEnd);
+    return () => {
+      window.removeEventListener("compositionstart", onStart);
+      window.removeEventListener("compositionend", onEnd);
+    };
+  }, []);
+
+  // прокидываем изменения наружу + автосейв с дебаунсом
   useEffect(() => {
     onChange?.(cfg);
-    // авто‑сохранение с дебаунсом
-    if (onSave) {
-      setSavingState("saving");
-      clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(async () => {
-        try {
-          await onSave(cfg);
-          setSavingState("saved");
-          setTimeout(() => setSavingState("idle"), 1200);
-        } catch {
-          setSavingState("idle");
-        }
-      }, 700);
-    }
+
+    if (!onSave) return;
+    clearTimeout(saveTimer.current);
+
+    // пауза на время набора
+    if (isComposingRef.current) return;
+
+    setSavingState("saving");
+    saveTimer.current = setTimeout(async () => {
+      try {
+        await onSave(cfg);
+        setSavingState("saved");
+        setTimeout(() => setSavingState("idle"), 1200);
+      } catch {
+        setSavingState("idle");
+      }
+    }, 700);
+
     return () => clearTimeout(saveTimer.current);
   }, [cfg]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -336,7 +349,6 @@ export default function CustomIdTab({
           <Row
             key={el.id || i}
             el={el}
-            idx={i}
             onChange={(nel) => updateAt(i, nel)}
             onRemove={() => removeAt(i)}
             onDragStart={() => setDragIdx(i)}
@@ -356,7 +368,7 @@ export default function CustomIdTab({
       <div>
         <button
           type="button"
-          className="rounded-xl border px-4 py-2 text-violet-600 hover:bg-violet-50"
+          className="rounded-xl border px-4 py-2 text-violet-600 hover:bg-violet-50 disabled:opacity-50"
           onClick={addElement}
           disabled={disabled}
         >

@@ -61,7 +61,7 @@ export default function InventoryDetails() {
     return () => { dead = true; };
   }, [id]);
 
-  // Пример значений для предпросмотра блока "Поле" в Custom ID
+  // Пример значений для предпросмотра блока "Поле" в Custom ID (оставил на будущее)
   const sampleFields = useMemo(() => ({
     brand: "ACME",
     model: "Z-500",
@@ -88,9 +88,10 @@ export default function InventoryDetails() {
     setSaving(true);
     setError("");
     try {
-      const updated = await inventoryService.update(inventory._id, { customIdFormat: nextCfg });
-      setInventory((prev) => ({ ...(prev || {}), customIdFormat: updated.customIdFormat || nextCfg }));
-      alert("Custom ID сохранён");
+      // сохраняем, НО не перетираем локальный state ответом бэка, чтобы не сбивать ввод
+      await inventoryService.update(inventory._id, { customIdFormat: nextCfg });
+      // setInventory не трогаем — текущее значение уже в state через onChange
+      // без alert — иначе фокус у инпута теряется
     } catch (e) {
       setError(e?.message || "Не удалось сохранить Custom ID");
     } finally {
@@ -132,7 +133,7 @@ export default function InventoryDetails() {
 
           {activeTab === "custom-id" && (
             <CustomIdTab
-              value={inventory.customIdFormat || { enabled: true, separator: "-", elements: [] }}
+              value={inventory.customIdFormat || { enabled: true, elements: [] }}
               onChange={(cfg) => setInventory((prev) => ({ ...(prev || {}), customIdFormat: cfg }))}
               onSave={handleSaveCustomId}
               disabled={saving}
