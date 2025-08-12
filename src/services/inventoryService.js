@@ -1,6 +1,5 @@
 // src/services/inventoryService.js
-// Сервис на fetch; использует Bearer-токен, если он передан,
-// и всегда отправляет cookies (credentials: 'include') для сессионной авторизации.
+// Сервис на fetch; использует Bearer-токен, если он передан.
 // База берётся из VITE_API_URL (без конечного слэша) или из относительного пути.
 
 import { getToken } from '../api/token';
@@ -39,7 +38,6 @@ export const inventoryService = {
     const res = await fetch(url(`/inventories${qs ? `?${qs}` : ''}`), {
       method: 'GET',
       headers: { Accept: 'application/json' },
-      credentials: 'include',
     });
     return handle(res);
   },
@@ -48,7 +46,6 @@ export const inventoryService = {
     const res = await fetch(url(`/inventories/${encodeURIComponent(id)}`), {
       method: 'GET',
       headers: { Accept: 'application/json' },
-      credentials: 'include',
     });
     return handle(res);
   },
@@ -62,7 +59,6 @@ export const inventoryService = {
         ...authHeaders(token),
       },
       body: JSON.stringify(payload),
-      credentials: 'include',
     });
     return handle(res);
   },
@@ -76,7 +72,6 @@ export const inventoryService = {
         ...authHeaders(token),
       },
       body: JSON.stringify(payload),
-      credentials: 'include',
     });
     return handle(res);
   },
@@ -88,7 +83,6 @@ export const inventoryService = {
         Accept: 'application/json',
         ...authHeaders(token),
       },
-      credentials: 'include',
     });
     return handle(res);
   },
