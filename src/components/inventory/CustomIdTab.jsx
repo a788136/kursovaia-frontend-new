@@ -275,7 +275,7 @@ export default function CustomIdTab({
     };
   }, []);
 
-  // прокидываем изменения наружу + автосейв с дебаунсом
+  // прокидываем изменения наружу + автосейв с дебаунсом (7.5s)
   useEffect(() => {
     onChange?.(cfg);
 
@@ -285,16 +285,17 @@ export default function CustomIdTab({
     // пауза на время набора
     if (isComposingRef.current) return;
 
-    setSavingState("saving");
+    // НЕ показываем "Saving…" заранее. Покажем только когда начнётся реальный запрос.
     saveTimer.current = setTimeout(async () => {
       try {
+        setSavingState("saving");
         await onSave(cfg);
         setSavingState("saved");
         setTimeout(() => setSavingState("idle"), 1200);
       } catch {
         setSavingState("idle");
       }
-    }, 700);
+    }, 7500); // 7.5 секунд после последнего изменения
 
     return () => clearTimeout(saveTimer.current);
   }, [cfg]); // eslint-disable-line react-hooks/exhaustive-deps
