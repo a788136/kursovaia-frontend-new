@@ -61,7 +61,7 @@ export default function InventoryDetails() {
     return () => { dead = true; };
   }, [id]);
 
-  // Пример для будущего использования
+  // Пример значений для предпросмотра блока "Поле" в Custom ID
   const sampleFields = useMemo(() => ({
     brand: "ACME",
     model: "Z-500",
@@ -87,8 +87,9 @@ export default function InventoryDetails() {
     setSaving(true);
     setError("");
     try {
-      // НЕ перезаписываем локальный state ответом сервера — это сбивало ввод
+      // ВАЖНО: не перезаписываем локальный state ответом бэка — это и вызывало «самоизменение» инпутов
       await inventoryService.update(inventory._id, { customIdFormat: nextCfg });
+      // локальный state уже актуален через onChange сверху
     } catch (e) {
       setError(e?.message || "Не удалось сохранить Custom ID");
     } finally {

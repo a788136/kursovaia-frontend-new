@@ -35,6 +35,7 @@ function uid() {
 }
 
 function normalizeInitial(val) {
+  // Поддержка старых схем из ранней версии
   if (!val) return { enabled: true, elements: [] };
   const elements = (val.elements || []).map((el) => {
     if (el.type === "text")  return { id: el.id || uid(), type: "fixed", value: el.value || "" };
@@ -49,10 +50,12 @@ function normalizeInitial(val) {
 /* ---------- helpers to preview ---------- */
 
 function hexFrom20bit() {
+  // 20 бит = 5 hex-символов
   const n = crypto.getRandomValues(new Uint32Array(1))[0] & 0xFFFFF;
   return n.toString(16).toUpperCase().padStart(5, "0");
 }
 function decFrom20bit(len = 6) {
+  // 20 бит максимум ~ 1,048,575 => до 6 десятичных знаков
   const n = crypto.getRandomValues(new Uint32Array(1))[0] & 0xFFFFF;
   return String(n).padStart(len, "0").slice(0, len);
 }
@@ -74,6 +77,7 @@ function datePreview(fmt = "yyyy") {
     ddd: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()],
   };
   let out = fmt;
+  // простая замена популярных токенов
   for (const [k, v] of Object.entries(map)) out = out.replaceAll(k, v);
   return out;
 }
@@ -249,13 +253,13 @@ export default function CustomIdTab({
   const saveTimer = useRef(null);
   const isComposingRef = useRef(false);
 
-  // Синхронизация только при реальном отличии НОРМАЛИЗОВАННЫХ значений (не реагируем на лишние поля вроде separator)
+  // sync external value (избегаем лишних ресетов по deep-равенству)
   useEffect(() => {
-    const next = normalizeInitial(value);
     setCfg((prev) => {
+      const ext = JSON.stringify(value || {});
       const cur = JSON.stringify(prev || {});
-      const nxt = JSON.stringify(next || {});
-      return cur === nxt ? prev : next;
+      if (ext === cur) return prev;
+      return normalizeInitial(value);
     });
   }, [value]);
 
