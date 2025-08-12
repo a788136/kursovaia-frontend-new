@@ -2,6 +2,8 @@
 // Сервис на fetch; использует Bearer-токен, если он передан.
 // База берётся из VITE_API_URL (без конечного слэша) или из относительного пути.
 
+import { getToken } from '../api/token';
+
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
 function url(path) {
@@ -48,7 +50,7 @@ export const inventoryService = {
     return handle(res);
   },
 
-  async create(payload, token) {
+  async create(payload, token = getToken()) {
     const res = await fetch(url('/inventories'), {
       method: 'POST',
       headers: {
@@ -61,7 +63,7 @@ export const inventoryService = {
     return handle(res);
   },
 
-  async update(id, payload, token) {
+  async update(id, payload, token = getToken()) {
     const res = await fetch(url(`/inventories/${encodeURIComponent(id)}`), {
       method: 'PUT',
       headers: {
@@ -74,7 +76,7 @@ export const inventoryService = {
     return handle(res);
   },
 
-  async remove(id, token) {
+  async remove(id, token = getToken()) {
     const res = await fetch(url(`/inventories/${encodeURIComponent(id)}`), {
       method: 'DELETE',
       headers: {
