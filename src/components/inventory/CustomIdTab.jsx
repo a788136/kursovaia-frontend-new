@@ -33,7 +33,6 @@ const DESCR = {
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 function normalizeInitial(val) {
-  // поддержка старых схем
   if (!val) return { enabled: true, elements: [] };
   const elements = (val.elements || []).map((el) => {
     if (el.type === "text")  return { id: el.id || uid(), type: "fixed", value: el.value || "" };
@@ -108,23 +107,20 @@ function Row({
 }) {
   const [showHelp, setShowHelp] = useState(false);
 
-  // локальный буфер ввода, чтобы ввод не «дёргался» при ререндерах/автосейве
+  // Локальный буфер ввода — НЕ перезаписываем его пропсами на каждый чих
   const toStr = () => (el.type === "fixed" ? (el.value ?? "") : (el.fmt ?? ""));
   const [text, setText] = useState(toStr());
   const keyRef = useRef(`${el.id}|${el.type}`);
 
+  // Синхронизация ТОЛЬКО при смене структуры (id/type). Значение не трогаем.
   useEffect(() => {
     const nextKey = `${el.id}|${el.type}`;
-    const nextStr = toStr();
-    const sameKey = nextKey === keyRef.current;
-    const sameStr = nextStr === text;
-    // обновляем локальный буфер, только если реально изменилось извне
-    if (!sameKey || !sameStr) {
+    if (nextKey !== keyRef.current) {
       keyRef.current = nextKey;
-      setText(nextStr);
+      setText(toStr());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [el.id, el.type, el.value, el.fmt]);
+  }, [el.id, el.type]);
 
   function commit(v) {
     setText(v);
@@ -135,7 +131,7 @@ function Row({
   return (
     <div
       className="rounded-2xl border bg-white dark:bg-zinc-900 shadow-sm p-3"
-      // ВАЖНО: НЕ draggable здесь, чтобы не ломать ввод
+      // ВАЖНО: НЕ draggable на контейнере, чтобы не ломать набор
       onDragOver={(e) => { e.preventDefault(); onDragOver?.(e); }}
       onDrop={onDrop}
     >
