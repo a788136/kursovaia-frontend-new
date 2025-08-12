@@ -30,12 +30,10 @@ const DESCR = {
     "An item creation date and time. E.g., use an abbreviated day of the week (ddd).",
 };
 
-function uid() {
-  return Math.random().toString(36).slice(2, 9);
-}
+const uid = () => Math.random().toString(36).slice(2, 9);
 
 function normalizeInitial(val) {
-  // Поддержка старых схем из ранней версии
+  // поддержка старых схем
   if (!val) return { enabled: true, elements: [] };
   const elements = (val.elements || []).map((el) => {
     if (el.type === "text")  return { id: el.id || uid(), type: "fixed", value: el.value || "" };
@@ -50,12 +48,10 @@ function normalizeInitial(val) {
 /* ---------- helpers to preview ---------- */
 
 function hexFrom20bit() {
-  // 20 бит = 5 hex-символов
   const n = crypto.getRandomValues(new Uint32Array(1))[0] & 0xFFFFF;
   return n.toString(16).toUpperCase().padStart(5, "0");
 }
 function decFrom20bit(len = 6) {
-  // 20 бит максимум ~ 1,048,575 => до 6 десятичных знаков
   const n = crypto.getRandomValues(new Uint32Array(1))[0] & 0xFFFFF;
   return String(n).padStart(len, "0").slice(0, len);
 }
@@ -77,7 +73,6 @@ function datePreview(fmt = "yyyy") {
     ddd: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()],
   };
   let out = fmt;
-  // простая замена популярных токенов
   for (const [k, v] of Object.entries(map)) out = out.replaceAll(k, v);
   return out;
 }
@@ -87,25 +82,15 @@ function rand20Preview(fmt = "X5_") {
   if (m) return decFrom20bit(Number(m[1] || 6)) + (fmt.endsWith("_") ? "_" : "");
   return hexFrom20bit();
 }
-
 function renderPreview(elements) {
   const parts = [];
   for (const el of elements || []) {
     switch (el.type) {
-      case "fixed":
-        parts.push(el.value || "");
-        break;
-      case "rand20":
-        parts.push(rand20Preview(el.fmt || "X5_"));
-        break;
-      case "seq":
-        parts.push(seqPreview(el.fmt || "D3"));
-        break;
-      case "date":
-        parts.push(datePreview(el.fmt || "yyyy"));
-        break;
-      default:
-        parts.push("");
+      case "fixed":  parts.push(el.value || ""); break;
+      case "rand20": parts.push(rand20Preview(el.fmt || "X5_")); break;
+      case "seq":    parts.push(seqPreview(el.fmt || "D3")); break;
+      case "date":   parts.push(datePreview(el.fmt || "yyyy")); break;
+      default:       parts.push("");
     }
   }
   return parts.join("");
@@ -123,23 +108,45 @@ function Row({
 }) {
   const [showHelp, setShowHelp] = useState(false);
 
+  // локальный буфер ввода, чтобы ввод не «дёргался» при ререндерах/автосейве
+  const toStr = () => (el.type === "fixed" ? (el.value ?? "") : (el.fmt ?? ""));
+  const [text, setText] = useState(toStr());
+  const keyRef = useRef(`${el.id}|${el.type}`);
+
+  useEffect(() => {
+    const nextKey = `${el.id}|${el.type}`;
+    const nextStr = toStr();
+    const sameKey = nextKey === keyRef.current;
+    const sameStr = nextStr === text;
+    // обновляем локальный буфер, только если реально изменилось извне
+    if (!sameKey || !sameStr) {
+      keyRef.current = nextKey;
+      setText(nextStr);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [el.id, el.type, el.value, el.fmt]);
+
+  function commit(v) {
+    setText(v);
+    if (el.type === "fixed") onChange({ ...el, value: v });
+    else onChange({ ...el, fmt: v });
+  }
+
   return (
     <div
       className="rounded-2xl border bg-white dark:bg-zinc-900 shadow-sm p-3"
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={(e) => {
-        e.preventDefault();
-        onDragOver?.(e);
-      }}
+      // ВАЖНО: НЕ draggable здесь, чтобы не ломать ввод
+      onDragOver={(e) => { e.preventDefault(); onDragOver?.(e); }}
       onDrop={onDrop}
     >
       <div className="flex items-center gap-2">
-        {/* drag handle */}
+        {/* drag handle — DnD только на кнопке */}
         <button
           type="button"
           className="cursor-grab text-zinc-500 px-2"
           title="Drag to reorder"
+          draggable
+          onDragStart={onDragStart}
         >
           ↕
         </button>
@@ -150,51 +157,35 @@ function Row({
           value={el.type}
           onChange={(e) => {
             const t = e.target.value;
-            if (t === "fixed") onChange({ id: el.id, type: t, value: "" });
-            if (t === "rand20") onChange({ id: el.id, type: t, fmt: "X5_" });
-            if (t === "seq") onChange({ id: el.id, type: t, fmt: "D3" });
-            if (t === "date") onChange({ id: el.id, type: t, fmt: "yyyy" });
+            if (t === "fixed") { onChange({ id: el.id, type: t, value: "" }); setText(""); }
+            if (t === "rand20"){ onChange({ id: el.id, type: t, fmt: "X5_" }); setText("X5_"); }
+            if (t === "seq")   { onChange({ id: el.id, type: t, fmt: "D3"  }); setText("D3"); }
+            if (t === "date")  { onChange({ id: el.id, type: t, fmt: "yyyy"}); setText("yyyy"); }
           }}
         >
           {TYPE_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
 
         {/* value / fmt input */}
-        {el.type === "fixed" ? (
-          <input
-            className="flex-1 rounded-xl border px-3 py-2"
-            placeholder="e.g. 📚-"
-            value={el.value || ""}
-            onChange={(e) => onChange({ ...el, value: e.target.value })}
-          />
-        ) : (
-          <input
-            className="flex-1 rounded-xl border px-3 py-2"
-            placeholder={
-              el.type === "rand20"
-                ? "X5_ or D6_"
-                : el.type === "seq"
-                ? "D3 or D"
-                : "yyyy"
-            }
-            value={el.fmt || ""}
-            onChange={(e) => onChange({ ...el, fmt: e.target.value })}
-          />
-        )}
+        <input
+          className="flex-1 rounded-xl border px-3 py-2"
+          placeholder={
+            el.type === "fixed" ? "e.g. 📚-" :
+            el.type === "rand20" ? "X5_ or D6_" :
+            el.type === "seq" ? "D3 or D" : "yyyy"
+          }
+          value={text}
+          onChange={(e) => commit(e.target.value)}
+        />
 
         {/* emoji quick insert for Fixed */}
         <button
           type="button"
           className="rounded-xl border px-2 py-2"
           title="Insert emoji"
-          onClick={() =>
-            el.type === "fixed" &&
-            onChange({ ...el, value: (el.value || "") + "📚" })
-          }
+          onClick={() => el.type === "fixed" && commit((text || "") + "📚")}
         >
           😊
         </button>
@@ -253,13 +244,12 @@ export default function CustomIdTab({
   const saveTimer = useRef(null);
   const isComposingRef = useRef(false);
 
-  // sync external value (избегаем лишних ресетов по deep-равенству)
+  // sync external value (строго по реальному отличию)
   useEffect(() => {
     setCfg((prev) => {
-      const ext = JSON.stringify(value || {});
+      const ext = JSON.stringify(normalizeInitial(value) || {});
       const cur = JSON.stringify(prev || {});
-      if (ext === cur) return prev;
-      return normalizeInitial(value);
+      return ext === cur ? prev : normalizeInitial(value);
     });
   }, [value]);
 
@@ -275,7 +265,7 @@ export default function CustomIdTab({
     };
   }, []);
 
-  // прокидываем изменения наружу + автосейв с дебаунсом (7.5s)
+  // прокидываем изменения наружу + автосейв (8s)
   useEffect(() => {
     onChange?.(cfg);
 
@@ -285,7 +275,6 @@ export default function CustomIdTab({
     // пауза на время набора
     if (isComposingRef.current) return;
 
-    // НЕ показываем "Saving…" заранее. Покажем только когда начнётся реальный запрос.
     saveTimer.current = setTimeout(async () => {
       try {
         setSavingState("saving");
@@ -295,8 +284,7 @@ export default function CustomIdTab({
       } catch {
         setSavingState("idle");
       }
-    }, 7500); // 7.5 секунд после последнего изменения
-
+    }, 8000); // строго 8 секунд
     return () => clearTimeout(saveTimer.current);
   }, [cfg]); // eslint-disable-line react-hooks/exhaustive-deps
 
