@@ -85,11 +85,21 @@ function renderPreview(elements) {
   const parts = [];
   for (const el of elements || []) {
     switch (el.type) {
-      case "fixed":  parts.push(el.value || ""); break;
-      case "rand20": parts.push(rand20Preview(el.fmt || "X5_")); break;
-      case "seq":    parts.push(seqPreview(el.fmt || "D3")); break;
-      case "date":   parts.push(datePreview(el.fmt || "yyyy")); break;
-      default:       parts.push("");
+      case "fixed":
+        parts.push(el.value ?? "");
+        break;
+      case "rand20":
+        // ВАЖНО: используем ?? чтобы пустая строка НЕ заменялась на дефолт
+        parts.push(rand20Preview((el.fmt ?? "X5_")));
+        break;
+      case "seq":
+        parts.push(seqPreview((el.fmt ?? "D3")));
+        break;
+      case "date":
+        parts.push(datePreview((el.fmt ?? "yyyy")));
+        break;
+      default:
+        parts.push("");
     }
   }
   return parts.join("");
@@ -107,12 +117,12 @@ function Row({
 }) {
   const [showHelp, setShowHelp] = useState(false);
 
-  // Локальный буфер ввода — НЕ перезаписываем его пропсами на каждый чих
+  // Локальный буфер ввода — не перезаписываем каждое значение из пропсов
   const toStr = () => (el.type === "fixed" ? (el.value ?? "") : (el.fmt ?? ""));
   const [text, setText] = useState(toStr());
   const keyRef = useRef(`${el.id}|${el.type}`);
 
-  // Синхронизация ТОЛЬКО при смене структуры (id/type). Значение не трогаем.
+  // Синхронизация ТОЛЬКО при смене структуры (id/type)
   useEffect(() => {
     const nextKey = `${el.id}|${el.type}`;
     if (nextKey !== keyRef.current) {
@@ -131,7 +141,7 @@ function Row({
   return (
     <div
       className="rounded-2xl border bg-white dark:bg-zinc-900 shadow-sm p-3"
-      // ВАЖНО: НЕ draggable на контейнере, чтобы не ломать набор
+      // НЕ draggable на контейнере, чтобы не ломать набор
       onDragOver={(e) => { e.preventDefault(); onDragOver?.(e); }}
       onDrop={onDrop}
     >
@@ -249,7 +259,7 @@ export default function CustomIdTab({
     });
   }, [value]);
 
-  // глобально отслеживаем составной ввод (IME), чтобы не сохранять во время набора
+  // IME-гвард, чтобы не сейвить во время набора
   useEffect(() => {
     const onStart = () => { isComposingRef.current = true; };
     const onEnd   = () => { isComposingRef.current = false; };
@@ -268,7 +278,6 @@ export default function CustomIdTab({
     if (!onSave) return;
     clearTimeout(saveTimer.current);
 
-    // пауза на время набора
     if (isComposingRef.current) return;
 
     saveTimer.current = setTimeout(async () => {
