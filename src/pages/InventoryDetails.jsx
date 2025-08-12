@@ -61,7 +61,7 @@ export default function InventoryDetails() {
     return () => { dead = true; };
   }, [id]);
 
-  // Пример значений для предпросмотра блока "Поле" в Custom ID
+  // Пример для будущего использования
   const sampleFields = useMemo(() => ({
     brand: "ACME",
     model: "Z-500",
@@ -74,8 +74,7 @@ export default function InventoryDetails() {
     setError("");
     try {
       const updated = await inventoryService.update(inventory._id, { fields: nextFields });
-      setInventory((prev) => ({ ...(prev || {}), fields: updated.fields || nextFields }));
-      // (убрано) alert("Поля сохранены");
+      setInventory((prev) => ({ ...(prev || {}), fields: updated?.fields ?? nextFields }));
     } catch (e) {
       setError(e?.message || "Не удалось сохранить поля");
     } finally {
@@ -88,9 +87,8 @@ export default function InventoryDetails() {
     setSaving(true);
     setError("");
     try {
-      const updated = await inventoryService.update(inventory._id, { customIdFormat: nextCfg });
-      setInventory((prev) => ({ ...(prev || {}), customIdFormat: updated.customIdFormat || nextCfg }));
-      // (убрано) alert("Custom ID сохранён");
+      // НЕ перезаписываем локальный state ответом сервера — это сбивало ввод
+      await inventoryService.update(inventory._id, { customIdFormat: nextCfg });
     } catch (e) {
       setError(e?.message || "Не удалось сохранить Custom ID");
     } finally {
