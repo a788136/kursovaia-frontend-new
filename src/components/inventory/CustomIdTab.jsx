@@ -35,11 +35,30 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 function normalizeInitial(val) {
   if (!val) return { enabled: true, elements: [] };
   const elements = (val.elements || []).map((el) => {
-    if (el.type === "text")  return { id: el.id || uid(), type: "fixed", value: el.value || "" };
-    if (el.type === "rand32")return { id: el.id || uid(), type: "rand20", fmt: "X5_" };
-    if (el.type === "seq")   return { id: el.id || uid(), type: "seq", fmt: el.pad ? `D${el.pad}` : "D" };
-    if (el.type === "date")  return { id: el.id || uid(), type: "date", fmt: el.format || "yyyy" };
-    return { id: el.id || uid(), ...el };
+    const id = el.id || uid();
+    switch (el.type) {
+      // легаси-совместимость
+      case "text":
+        return { id, type: "fixed", value: el.value ?? "" };
+      case "rand32":
+        return { id, type: "rand20", fmt: "X5_" };
+
+      // актуальные типы — СБЕРЕГАЕМ существующий fmt/value
+      case "fixed":
+        return { id, type: "fixed", value: el.value ?? "" };
+      case "rand20":
+        return { id, type: "rand20", fmt: el.fmt ?? "X5_" };
+      case "seq": {
+        const fmt = el.fmt ?? (el.pad ? `D${el.pad}` : "D");
+        return { id, type: "seq", fmt };
+      }
+      case "date": {
+        const fmt = el.fmt ?? el.format ?? "yyyy";
+        return { id, type: "date", fmt };
+      }
+      default:
+        return { id, ...el };
+    }
   });
   return { enabled: !!val.enabled, elements };
 }
@@ -61,6 +80,12 @@ function seqPreview(fmt = "D3") {
   return pad > 0 ? String(13).padStart(pad, "0") : "13";
 }
 function datePreview(fmt = "yyyy") {
+  if (fmt == null) return "";
+  const s = String(fmt);
+
+  // если пользователь ввёл «сырой» текст/числа без токенов — покажем как есть
+  if (!/[yMdHhms]/i.test(s)) return s;
+
   const d = new Date();
   const map = {
     yyyy: d.getFullYear().toString(),
@@ -71,7 +96,7 @@ function datePreview(fmt = "yyyy") {
     d: String(d.getDate()),
     ddd: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()],
   };
-  let out = fmt;
+  let out = s;
   for (const [k, v] of Object.entries(map)) out = out.replaceAll(k, v);
   return out;
 }
@@ -89,14 +114,13 @@ function renderPreview(elements) {
         parts.push(el.value ?? "");
         break;
       case "rand20":
-        // ВАЖНО: используем ?? чтобы пустая строка НЕ заменялась на дефолт
-        parts.push(rand20Preview((el.fmt ?? "X5_")));
+        parts.push(rand20Preview(el.fmt ?? "X5_"));
         break;
       case "seq":
-        parts.push(seqPreview((el.fmt ?? "D3")));
+        parts.push(seqPreview(el.fmt ?? "D3"));
         break;
       case "date":
-        parts.push(datePreview((el.fmt ?? "yyyy")));
+        parts.push(datePreview(el.fmt ?? "yyyy"));
         break;
       default:
         parts.push("");
@@ -117,12 +141,12 @@ function Row({
 }) {
   const [showHelp, setShowHelp] = useState(false);
 
-  // Локальный буфер ввода — не перезаписываем каждое значение из пропсов
+  // локальный буфер ввода (устойчив к ререндерам)
   const toStr = () => (el.type === "fixed" ? (el.value ?? "") : (el.fmt ?? ""));
   const [text, setText] = useState(toStr());
   const keyRef = useRef(`${el.id}|${el.type}`);
 
-  // Синхронизация ТОЛЬКО при смене структуры (id/type)
+  // синхронизация ТОЛЬКО при смене структуры (id/type)
   useEffect(() => {
     const nextKey = `${el.id}|${el.type}`;
     if (nextKey !== keyRef.current) {
@@ -141,7 +165,6 @@ function Row({
   return (
     <div
       className="rounded-2xl border bg-white dark:bg-zinc-900 shadow-sm p-3"
-      // НЕ draggable на контейнере, чтобы не ломать набор
       onDragOver={(e) => { e.preventDefault(); onDragOver?.(e); }}
       onDrop={onDrop}
     >
