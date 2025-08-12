@@ -37,13 +37,13 @@ function normalizeInitial(val) {
   const elements = (val.elements || []).map((el) => {
     const id = el.id || uid();
     switch (el.type) {
-      // легаси-совместимость
+      // legacy
       case "text":
         return { id, type: "fixed", value: el.value ?? "" };
       case "rand32":
         return { id, type: "rand20", fmt: "X5_" };
 
-      // актуальные типы — СБЕРЕГАЕМ существующий fmt/value
+      // current
       case "fixed":
         return { id, type: "fixed", value: el.value ?? "" };
       case "rand20":
@@ -63,30 +63,30 @@ function normalizeInitial(val) {
   return { enabled: !!val.enabled, elements };
 }
 
-/* ---------- helpers to preview ---------- */
+/* ---------- helpers to preview (stable) ---------- */
 
-function hexFrom20bit() {
-  const n = crypto.getRandomValues(new Uint32Array(1))[0] & 0xFFFFF;
-  return n.toString(16).toUpperCase().padStart(5, "0");
+// Форматируем 20-битное число согласно fmt, не генеря новый рандом
+function formatRand20(base20, fmt = "X5_") {
+  const suffix = fmt.endsWith("_") ? "_" : "";
+  if (/^X5_?$/i.test(fmt)) {
+    return (base20 >>> 0).toString(16).toUpperCase().padStart(5, "0") + suffix;
+  }
+  const m = /^D(\d+)_?$/i.exec(fmt);
+  if (m) {
+    const len = Number(m[1] || 6);
+    return String(base20 >>> 0).padStart(len, "0").slice(0, len) + suffix;
+  }
+  // дефолт — hex
+  return (base20 >>> 0).toString(16).toUpperCase().padStart(5, "0") + suffix;
 }
-function decFrom20bit(len = 6) {
-  const n = crypto.getRandomValues(new Uint32Array(1))[0] & 0xFFFFF;
-  return String(n).padStart(len, "0").slice(0, len);
-}
-function seqPreview(fmt = "D3") {
-  const m = /^D(\d+)?$/.exec(fmt);
-  if (!m) return "1";
-  const pad = Number(m[1] || 0);
-  return pad > 0 ? String(13).padStart(pad, "0") : "13";
-}
-function datePreview(fmt = "yyyy") {
+
+// Предпросмотр даты по ЗАФИКСИРОВАННОЙ sample-дате
+function datePreviewAt(d, fmt = "yyyy") {
   if (fmt == null) return "";
   const s = String(fmt);
-
-  // если пользователь ввёл «сырой» текст/числа без токенов — покажем как есть
+  // если нет токенов — вернуть как есть
   if (!/[yMdHhms]/i.test(s)) return s;
 
-  const d = new Date();
   const map = {
     yyyy: d.getFullYear().toString(),
     yy: d.getFullYear().toString().slice(-2),
@@ -100,30 +100,48 @@ function datePreview(fmt = "yyyy") {
   for (const [k, v] of Object.entries(map)) out = out.replaceAll(k, v);
   return out;
 }
-function rand20Preview(fmt = "X5_") {
-  if (/^X5_?$/i.test(fmt)) return hexFrom20bit() + (fmt.endsWith("_") ? "_" : "");
-  const m = /^D(\d+)_?$/i.exec(fmt);
-  if (m) return decFrom20bit(Number(m[1] || 6)) + (fmt.endsWith("_") ? "_" : "");
-  return hexFrom20bit();
+
+function seqPreview(fmt = "D3") {
+  const m = /^D(\d+)?$/.exec(fmt);
+  if (!m) return "1";
+  const pad = Number(m[1] || 0);
+  return pad > 0 ? String(13).padStart(pad, "0") : "13";
 }
-function renderPreview(elements) {
+
+// Стабильный рендер превью: кэшируем base20 per element.id и фиксируем sample date
+function renderPreviewStable(elements, randCacheMap, sampleDate) {
   const parts = [];
   for (const el of elements || []) {
     switch (el.type) {
-      case "fixed":
+      case "fixed": {
         parts.push(el.value ?? "");
+        // если тип не rand20 — чистим возможный мусор
+        randCacheMap.delete(el.id);
         break;
-      case "rand20":
-        parts.push(rand20Preview(el.fmt ?? "X5_"));
+      }
+      case "rand20": {
+        if (!randCacheMap.has(el.id)) {
+          const n = crypto.getRandomValues(new Uint32Array(1))[0] & 0xFFFFF;
+          randCacheMap.set(el.id, n);
+        }
+        const base = randCacheMap.get(el.id);
+        parts.push(formatRand20(base, el.fmt ?? "X5_"));
         break;
-      case "seq":
+      }
+      case "seq": {
+        randCacheMap.delete(el.id);
         parts.push(seqPreview(el.fmt ?? "D3"));
         break;
-      case "date":
-        parts.push(datePreview(el.fmt ?? "yyyy"));
+      }
+      case "date": {
+        randCacheMap.delete(el.id);
+        parts.push(datePreviewAt(sampleDate, el.fmt ?? "yyyy"));
         break;
-      default:
+      }
+      default: {
+        randCacheMap.delete(el.id);
         parts.push("");
+      }
     }
   }
   return parts.join("");
@@ -141,7 +159,7 @@ function Row({
 }) {
   const [showHelp, setShowHelp] = useState(false);
 
-  // локальный буфер ввода (устойчив к ререндерам)
+  // локальный буфер ввода
   const toStr = () => (el.type === "fixed" ? (el.value ?? "") : (el.fmt ?? ""));
   const [text, setText] = useState(toStr());
   const keyRef = useRef(`${el.id}|${el.type}`);
@@ -273,6 +291,10 @@ export default function CustomIdTab({
   const saveTimer = useRef(null);
   const isComposingRef = useRef(false);
 
+  // стабильные источники для превью
+  const randCacheRef = useRef(new Map());       // id -> base20
+  const sampleDateRef = useRef(new Date());     // фиксированная дата для превью
+
   // sync external value (строго по реальному отличию)
   useEffect(() => {
     setCfg((prev) => {
@@ -323,6 +345,9 @@ export default function CustomIdTab({
   }
   function removeAt(i) {
     setCfg({ ...cfg, elements: cfg.elements.filter((_, idx) => idx !== i) });
+    // чистим кэш превью для удалённого элемента
+    const removed = cfg.elements[i];
+    if (removed?.id) randCacheRef.current.delete(removed.id);
   }
   function addElement() {
     setCfg({
@@ -331,7 +356,10 @@ export default function CustomIdTab({
     });
   }
 
-  const preview = useMemo(() => renderPreview(cfg.elements), [cfg.elements]);
+  const preview = useMemo(
+    () => renderPreviewStable(cfg.elements, randCacheRef.current, sampleDateRef.current),
+    [cfg.elements]
+  );
 
   return (
     <div className="space-y-5">
