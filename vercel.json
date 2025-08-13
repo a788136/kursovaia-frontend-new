@@ -1,11 +1,7 @@
 {
-  "version": 2,
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "https://kursovoi-backend-new.onrender.com/:path*" },
-
-    { 
-      "source": "/((?!assets/|favicon\\.ico|robots\\.txt|manifest\\.webmanifest|sw\\.js|workbox-.*\\.js|.*\\.(css|js|mjs|map|png|jpg|jpeg|gif|svg|ico|txt|json|woff|woff2|ttf|pdf)).*)",
-      "destination": "/index.html"
-    }
+  "routes": [
+    { "src": "/api/(.*)", "dest": "https://kursovoi-backend-new.onrender.com/$1" },
+    { "handle": "filesystem" },
+    { "src": "/.*", "dest": "/" }
   ]
 }
