@@ -2,8 +2,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { itemsService } from '../../services/itemsService';
 import ItemForm from './ItemForm';
-import LikeButton from '../LikeButton';               // ⬅️ добавлено
-import { likeService } from '../../services/likeService'; // ⬅️ добавлено
+import LikeButton from '../LikeButton';               // <— добавлено
+import { likeService } from '../../services/likeService'; // <— добавлено
 
 function fmtDate(s) {
   try {
@@ -37,8 +37,8 @@ export default function ItemsTab({ inventory }) {
   const [sel, setSel] = useState(() => new Set()); // selected ids
   const [error, setError] = useState('');
 
-  // Лайки: id -> { count, liked, loading }
-  const [likes, setLikes] = useState({});
+  // КЭШ ЛАЙКОВ: itemId -> { count, liked }
+  const [likesById, setLikesById] = useState(() => new Map());
 
   // Модалки создания/редактирования
   const [showCreate, setShowCreate] = useState(false);
@@ -65,35 +65,31 @@ export default function ItemsTab({ inventory }) {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [inventory?._id, limit, offset]);
 
-  // Подгружаем лайки для видимых строк (лениво)
+  // Подгружаем лайки для текущих строк в таблице
   useEffect(() => {
     let dead = false;
-    (async () => {
-      const missing = (rows || []).filter(r => !likes[r._id]);
-      if (missing.length === 0) return;
-
-      // помечаем loading
-      setLikes(prev => {
-        const next = { ...prev };
-        for (const r of missing) next[r._id] = { count: 0, liked: false, loading: true };
-        return next;
-      });
-
-      // батч-параллель
-      await Promise.all(missing.map(async (r) => {
+    async function hydrateLikes() {
+      if (!rows.length) return;
+      // Параллельная загрузка
+      const promises = rows.map(async (r) => {
         try {
           const data = await likeService.getLikes(r._id, token);
-          if (dead) return;
-          setLikes(prev => ({ ...prev, [r._id]: { count: data.count || 0, liked: !!data.liked, loading: false } }));
+          return [r._id, { count: data.count || 0, liked: !!data.liked }];
         } catch {
-          if (dead) return;
-          setLikes(prev => ({ ...prev, [r._id]: { count: 0, liked: false, loading: false } }));
+          return [r._id, { count: 0, liked: false }];
         }
-      }));
-    })();
+      });
+      const entries = await Promise.all(promises);
+      if (dead) return;
+      setLikesById((prev) => {
+        const next = new Map(prev);
+        for (const [id, v] of entries) next.set(id, v);
+        return next;
+      });
+    }
+    hydrateLikes();
     return () => { dead = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows]);
+  }, [rows, token]);
 
   function toggleAll(e) {
     if (e.target.checked) {
@@ -117,10 +113,10 @@ export default function ItemsTab({ inventory }) {
     try {
       await itemsService.bulkRemove(Array.from(sel), token);
       setSel(new Set());
-      // чистим кэш лайков для удалённых
-      setLikes(prev => {
-        const next = { ...prev };
-        for (const id of sel) delete next[id];
+      // подчистим лайки удалённых ids
+      setLikesById(prev => {
+        const next = new Map(prev);
+        for (const id of sel) next.delete(id);
         return next;
       });
       await load();
@@ -160,11 +156,6 @@ export default function ItemsTab({ inventory }) {
     } finally {
       setLoading(false);
     }
-  }
-
-  // Обновляем локальный кэш лайков по сигналу из LikeButton
-  function onLikeChange(itemId, next) {
-    setLikes(prev => ({ ...prev, [itemId]: { ...(prev[itemId] || {}), ...next, loading: false } }));
   }
 
   return (
@@ -216,22 +207,20 @@ export default function ItemsTab({ inventory }) {
                 />
               </th>
               <th className="p-3 text-left">Custom ID</th>
-              <th className="p-3 text-left w-24">Likes</th> {/* ⬅️ новая колонка */}
               <th className="p-3 text-left">Fields</th>
+              <th className="p-3 text-left w-28">Likes</th>{/* <— новая колонка */}
               <th className="p-3 text-left">Created</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => {
-              const lk = likes[r._id] || { count: 0, liked: false, loading: true };
+              const likeState = likesById.get(r._id) || { count: 0, liked: false };
               return (
                 <tr
                   key={r._id}
                   className="border-t hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
                   onClick={(e) => {
-                    // Не триггерим по клику на interactive элементы
-                    const tag = e.target?.tagName?.toLowerCase();
-                    if (tag === 'input' || tag === 'button' || tag === 'svg' || tag === 'path') return;
+                    if (e.target?.tagName?.toLowerCase() === 'input') return;
                     setEditItem(r);
                   }}
                 >
@@ -243,21 +232,24 @@ export default function ItemsTab({ inventory }) {
                       onClick={(e) => e.stopPropagation()}
                     />
                   </td>
-
                   <td className="p-3 font-mono">{r.custom_id}</td>
-
-                  {/* Likes cell */}
-                  <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                  <td className="p-3"><FieldsPreview fields={r.fields} /></td>
+                  <td className="p-3">
                     <LikeButton
                       itemId={r._id}
-                      initialCount={lk.count}
-                      initialLiked={lk.liked}
-                      disabled={loading === 'saving' || lk.loading}
-                      onChange={(next) => onLikeChange(r._id, next)} // {count, liked}
+                      initialCount={likeState.count}
+                      initialLiked={likeState.liked}
+                      disabled={loading === 'saving'}
+                      onChange={(next) => {
+                        // мгновенно сохраняем новое состояние, чтобы пропсы не «откатывали» кнопку
+                        setLikesById((prev) => {
+                          const m = new Map(prev);
+                          m.set(r._id, { count: next.count, liked: next.liked });
+                          return m;
+                        });
+                      }}
                     />
                   </td>
-
-                  <td className="p-3"><FieldsPreview fields={r.fields} /></td>
                   <td className="p-3">{fmtDate(r.created_at)}</td>
                 </tr>
               );
