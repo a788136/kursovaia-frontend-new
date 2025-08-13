@@ -23,7 +23,7 @@ const DICT = {
       items: "Элементы",
       chat: "Чат",
       settings: "Настройки",
-      customId: "Custom ID",
+      customId: "Кастомный ID",
       fields: "Поля",
       access: "Доступ",
       stats: "Статистика",
@@ -200,6 +200,7 @@ export default function InventoryDetails({ user, lang: langProp }) {
 
           {activeTab === "custom-id" && (
             <CustomIdTab
+              lang={lang}
               value={inventory.customIdFormat || { enabled: true, separator: "-", elements: [] }}
               onChange={(cfg) =>
                 setInventory((prev) => ({ ...(prev || {}), customIdFormat: cfg }))

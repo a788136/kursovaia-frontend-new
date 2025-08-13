@@ -14,20 +14,94 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
  * }
  */
 
-const TYPE_OPTIONS = [
-  { value: "fixed", label: "Fixed" },
-  { value: "rand20", label: "20-bit random" },
-  { value: "seq", label: "Sequence" },
-  { value: "date", label: "Date/time" },
-];
-
-const DESCR = {
-  fixed: "A piece of unchanging text. E.g., you can use Unicode emoji.",
-  rand20:
-    "A random value. E.g., format as a six-digit decimal (D6) or 5-digit hex (X5).",
-  seq: "A sequential index. E.g., format with leading zeros (D4) or without them (D).",
-  date:
-    "An item creation date and time. E.g., use an abbreviated day of the week (ddd).",
+// ---- i18n ----
+const I18N = {
+  ru: {
+    title: "Пользовательский ID",
+    savedBadge: "Все изменения сохранены",
+    savingBadge: "Сохранение…",
+    intro:
+      "Вы можете настроить инвентарные номера в удобном формате. Чтобы собрать формат, добавляйте элементы, редактируйте их, тяните для изменения порядка или перетаскивайте за пределы формы, чтобы удалить.",
+    example: "Пример:",
+    addElement: "Добавить элемент",
+    placeholders: {
+      fixed: "напр. 📚-",
+      rand20: "X5_ или D6_",
+      seq: "D3 или D",
+      date: "yyyy",
+    },
+    titles: {
+      drag: "Перетащите для изменения порядка",
+      insertEmoji: "Вставить эмодзи",
+      help: "Справка",
+      delete: "Удалить",
+    },
+    typeLabels: {
+      fixed: "Фиксированный текст",
+      rand20: "20-битный рандом",
+      seq: "Счётчик",
+      date: "Дата/время",
+    },
+    descr: {
+      fixed:
+        "Неизменяемый кусочек текста. Можно использовать Unicode-эмодзи.",
+      rand20:
+        "Случайное значение. Например, шесть десятичных (D6) или 5 шестнадцатеричных (X5).",
+      seq: "Последовательный индекс. С ведущими нулями (D4) или без них (D).",
+      date:
+        "Дата/время создания. Например, сокращённый день недели (ddd).",
+    },
+    helpTail: {
+      rand20:
+        "X5 = 5 hex-символов (20 бит). D6 = 6 цифр (с ведущими нулями). Необязательный '_' в конце добавит подчёркивание.",
+      seq: "Используйте D + число для десятичного с нулями (напр., D4). Просто 'D' — без нулей.",
+      date: "Частые токены: yyyy, yy, MM, dd, ddd.",
+      fixed: "Свободный текст; эмодзи разрешены.",
+    },
+  },
+  en: {
+    title: "Custom ID",
+    savedBadge: "All changes saved",
+    savingBadge: "Saving…",
+    intro:
+      "Set up inventory numbers in your preferred format. Add elements, edit them, drag to reorder, or drag items out of the form to delete.",
+    example: "Example:",
+    addElement: "Add element",
+    placeholders: {
+      fixed: "e.g. 📚-",
+      rand20: "X5_ or D6_",
+      seq: "D3 or D",
+      date: "yyyy",
+    },
+    titles: {
+      drag: "Drag to reorder",
+      insertEmoji: "Insert emoji",
+      help: "Help",
+      delete: "Delete",
+    },
+    typeLabels: {
+      fixed: "Fixed",
+      rand20: "20-bit random",
+      seq: "Sequence",
+      date: "Date/time",
+    },
+    descr: {
+      fixed:
+        "A piece of unchanging text. You can use Unicode emoji.",
+      rand20:
+        "A random value. E.g., six-digit decimal (D6) or five-digit hex (X5).",
+      seq: "A sequential index. With leading zeros (D4) or without them (D).",
+      date:
+        "Item creation date/time. E.g., abbreviated day of week (ddd).",
+    },
+    helpTail: {
+      rand20:
+        "X5 = 5 hex chars (20-bit). D6 = 6 digits (with leading zeros). Optional trailing '_' adds underscore.",
+      seq: "Use D + digits for left-padded decimal (e.g., D4). Plain 'D' for no padding.",
+      date: "Common tokens: yyyy, yy, MM, dd, ddd.",
+      fixed: "Free text; emoji allowed.",
+    },
+  },
 };
 
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -51,6 +125,7 @@ function normalizeInitial(val) {
 
 /* ---------- preview helpers (stable) ---------- */
 
+// Форматируем 20-битное число согласно fmt, не генеря новый рандом
 function formatRand20(base20, fmt = "X5_") {
   const suffix = fmt.endsWith("_") ? "_" : "";
   if (/^X5_?$/i.test(fmt)) {
@@ -90,7 +165,7 @@ function seqPreview(fmt = "D3") {
   return pad > 0 ? String(13).padStart(pad, "0") : "13";
 }
 
-// Превью учитывает draft-ввод (если есть), кэш rand20 по id и фиксированную дату
+// Превью учитывает draft-ввод, кэш rand20 по id и фиксированную дату
 function renderPreviewStable(elements, drafts, randCacheMap, sampleDate) {
   const parts = [];
   for (const el of elements || []) {
@@ -141,7 +216,8 @@ function Row({
   onDragStart,
   onDragOver,
   onDrop,
-  onDraftChange,     // NEW: сообщает текущий ввод наверх
+  onDraftChange,     // сообщает текущий ввод наверх
+  i18n,              // перевод
 }) {
   const [showHelp, setShowHelp] = useState(false);
 
@@ -180,7 +256,7 @@ function Row({
         <button
           type="button"
           className="cursor-grab text-zinc-500 px-2"
-          title="Drag to reorder"
+          title={i18n.titles.drag}
           draggable
           onDragStart={onDragStart}
         >
@@ -199,8 +275,8 @@ function Row({
             if (t === "date")  { onChange({ id: el.id, type: t, fmt: "yyyy"}); commit("yyyy"); }
           }}
         >
-          {TYPE_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+          {["fixed", "rand20", "seq", "date"].map((v) => (
+            <option key={v} value={v}>{i18n.typeLabels[v]}</option>
           ))}
         </select>
 
@@ -208,9 +284,9 @@ function Row({
         <input
           className="flex-1 rounded-xl border px-3 py-2"
           placeholder={
-            el.type === "fixed" ? "e.g. 📚-" :
-            el.type === "rand20" ? "X5_ or D6_" :
-            el.type === "seq" ? "D3 or D" : "yyyy"
+            el.type === "fixed" ? i18n.placeholders.fixed :
+            el.type === "rand20" ? i18n.placeholders.rand20 :
+            el.type === "seq" ? i18n.placeholders.seq : i18n.placeholders.date
           }
           value={text}
           onChange={(e) => commit(e.target.value)}
@@ -220,7 +296,7 @@ function Row({
         <button
           type="button"
           className="rounded-xl border px-2 py-2"
-          title="Insert emoji"
+          title={i18n.titles.insertEmoji}
           onClick={() => el.type === "fixed" && commit((text || "") + "📚")}
         >
           😊
@@ -230,7 +306,7 @@ function Row({
         <button
           type="button"
           className="rounded-xl border px-2 py-2"
-          title="Help"
+          title={i18n.titles.help}
           onClick={() => setShowHelp((s) => !s)}
         >
           ?
@@ -241,7 +317,7 @@ function Row({
           type="button"
           className="text-red-600 px-2"
           onClick={onRemove}
-          title="Delete"
+          title={i18n.titles.delete}
         >
           ✕
         </button>
@@ -249,16 +325,16 @@ function Row({
 
       {/* description/help */}
       <div className="mt-2 text-sm text-zinc-500">
-        {DESCR[el.type]}
+        {i18n.descr[el.type]}
         {showHelp && (
           <span className="ml-2 italic opacity-80">
             {el.type === "rand20"
-              ? "X5 = 5 hex chars (20-bit). D6 = 6 digits (with leading zeros). Optional trailing '_' to add underscore."
+              ? i18n.helpTail.rand20
               : el.type === "seq"
-              ? "Use D + digits for left-padded decimal (e.g., D4). Plain 'D' for no padding."
+              ? i18n.helpTail.seq
               : el.type === "date"
-              ? "Common tokens: yyyy, yy, MM, dd, ddd."
-              : "Free text; emoji allowed."}
+              ? i18n.helpTail.date
+              : i18n.helpTail.fixed}
           </span>
         )}
       </div>
@@ -273,7 +349,13 @@ export default function CustomIdTab({
   onChange,
   onSave,
   disabled,
+  lang: langProp,            // опционально можно прокинуть сверху
 }) {
+  const lang = (langProp || localStorage.getItem("lang") || "ru") in I18N
+    ? (langProp || localStorage.getItem("lang") || "ru")
+    : "ru";
+  const i18n = I18N[lang];
+
   const [cfg, setCfg] = useState(() => normalizeInitial(value));
   const [dragIdx, setDragIdx] = useState(null);
   const [savingState, setSavingState] = useState("idle"); // 'idle' | 'saving' | 'saved'
@@ -363,27 +445,25 @@ export default function CustomIdTab({
     <div className="space-y-5">
       {/* Header with saved state */}
       <div className="flex items-center justify-between">
-        <div className="text-2xl font-semibold">Custom ID</div>
+        <div className="text-2xl font-semibold">{i18n.title}</div>
         {savingState === "saved" && (
           <span className="text-xs rounded-full bg-green-100 text-green-700 px-3 py-1">
-            All changes saved
+            {i18n.savedBadge}
           </span>
         )}
         {savingState === "saving" && (
           <span className="text-xs rounded-full bg-amber-100 text-amber-700 px-3 py-1">
-            Saving…
+            {i18n.savingBadge}
           </span>
         )}
       </div>
 
       <p className="text-sm text-zinc-600">
-        You can set up items with inventory numbers in your preferred format.
-        To create a format, add new elements, edit them, drag to reorder, or
-        drag elements out of the form to delete them.
+        {i18n.intro}
       </p>
 
       <div className="text-sm">
-        <span className="opacity-60 mr-2">Example:</span>
+        <span className="opacity-60 mr-2">{i18n.example}</span>
         <span className="font-mono text-lg break-all">{preview || "—"}</span>
       </div>
 
@@ -408,6 +488,7 @@ export default function CustomIdTab({
               if (v === undefined) draftsRef.current.delete(id);
               else draftsRef.current.set(id, v);
             }}
+            i18n={i18n}
           />
         ))}
       </div>
@@ -419,7 +500,7 @@ export default function CustomIdTab({
           onClick={addElement}
           disabled={disabled}
         >
-          Add element
+          {i18n.addElement}
         </button>
       </div>
     </div>
