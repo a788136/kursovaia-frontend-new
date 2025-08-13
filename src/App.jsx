@@ -106,7 +106,7 @@ export default function App() {
           <Route path="/inventories" element={<AllInventories />} />
 
           {/* Страница инвентаризации */}
-          <Route path="/inventories/:id" element={<InventoryDetails user={user} />} />
+          <Route path="/inventories/:id" element={<InventoryDetails user={user} lang={lang}/>} />
 
           {/* Отдельная страница редактирования */}
           <Route path="/inventories/:id/edit" element={

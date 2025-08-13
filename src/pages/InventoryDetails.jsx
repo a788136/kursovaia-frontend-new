@@ -13,18 +13,79 @@ import AccessTab from "../components/inventory/AccessTab";
 import StatsTab from "../components/inventory/StatsTab";
 import ExportTab from "../components/inventory/ExportTab";
 
-const TAB_VALUES = [
-  { value: "items", label: "Items" },
-  { value: "chat", label: "Chat" },
-  { value: "settings", label: "Settings" },
-  { value: "custom-id", label: "Custom ID" },
-  { value: "fields", label: "Fields" },
-  { value: "access", label: "Access" },
-  { value: "stats", label: "Stats" },
-  { value: "export", label: "Export" },
-];
+/**
+ * Локальные переводы страницы. Если прилетит t/lang из App — можно будет
+ * переключиться на централизованный словарь, но сейчас делаем автономно.
+ */
+const DICT = {
+  ru: {
+    tabs: {
+      items: "Элементы",
+      chat: "Чат",
+      settings: "Настройки",
+      customId: "Custom ID",
+      fields: "Поля",
+      access: "Доступ",
+      stats: "Статистика",
+      export: "Экспорт",
+    },
+    back: "← Все инвентаризации",
+    untitled: "Без названия",
+    saving: "Сохранение…",
+    loading: "Загрузка…",
+    loadingInventory: "Загрузка инвентаризации…",
+    notFound: "Инвентаризация не найдена.",
+    errors: {
+      loadFailed: "Не удалось загрузить",
+      saveFieldsFailed: "Не удалось сохранить поля",
+      saveCustomIdFailed: "Не удалось сохранить Custom ID",
+    },
+  },
+  en: {
+    tabs: {
+      items: "Items",
+      chat: "Chat",
+      settings: "Settings",
+      customId: "Custom ID",
+      fields: "Fields",
+      access: "Access",
+      stats: "Stats",
+      export: "Export",
+    },
+    back: "← All inventories",
+    untitled: "Untitled inventory",
+    saving: "Saving…",
+    loading: "Loading…",
+    loadingInventory: "Loading inventory…",
+    notFound: "Inventory not found.",
+    errors: {
+      loadFailed: "Failed to load",
+      saveFieldsFailed: "Failed to save fields",
+      saveCustomIdFailed: "Failed to save Custom ID",
+    },
+  },
+};
 
-export default function InventoryDetails() {
+export default function InventoryDetails({ user, lang: langProp }) {
+  // язык: из пропсов -> из localStorage -> ru
+  const lang = (langProp || localStorage.getItem("lang") || "ru").toLowerCase().startsWith("en") ? "en" : "ru";
+  const L = DICT[lang];
+
+  // табы с локализованными подписями (значения — прежние, чтобы ссылки и логика не ломались)
+  const TAB_VALUES = useMemo(
+    () => [
+      { value: "items", label: L.tabs.items },
+      { value: "chat", label: L.tabs.chat },
+      { value: "settings", label: L.tabs.settings },
+      { value: "custom-id", label: L.tabs.customId },
+      { value: "fields", label: L.tabs.fields },
+      { value: "access", label: L.tabs.access },
+      { value: "stats", label: L.tabs.stats },
+      { value: "export", label: L.tabs.export },
+    ],
+    [L]
+  );
+
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -36,7 +97,7 @@ export default function InventoryDetails() {
   const activeTab = useMemo(() => {
     const t = searchParams.get("tab");
     return TAB_VALUES.some((x) => x.value === t) ? t : "items";
-  }, [searchParams]);
+  }, [searchParams, TAB_VALUES]);
 
   function setTab(value) {
     const next = new URLSearchParams(searchParams);
@@ -53,20 +114,25 @@ export default function InventoryDetails() {
         const inv = await getInventoryById(id);
         if (!dead) setInventory(inv);
       } catch (e) {
-        if (!dead) setError(e?.message || "Failed to load");
+        if (!dead) setError(e?.message || L.errors.loadFailed);
       } finally {
         if (!dead) setLoading(false);
       }
     })();
-    return () => { dead = true; };
-  }, [id]);
+    return () => {
+      dead = true;
+    };
+  }, [id, L.errors.loadFailed]);
 
   // Пример значений для предпросмотра блока "Поле" в Custom ID
-  const sampleFields = useMemo(() => ({
-    brand: "ACME",
-    model: "Z-500",
-    year: "2025",
-  }), []);
+  const sampleFields = useMemo(
+    () => ({
+      brand: "ACME",
+      model: "Z-500",
+      year: "2025",
+    }),
+    []
+  );
 
   async function handleSaveFields(nextFields) {
     if (!inventory?._id) return;
@@ -76,7 +142,7 @@ export default function InventoryDetails() {
       const updated = await inventoryService.update(inventory._id, { fields: nextFields });
       setInventory((prev) => ({ ...(prev || {}), fields: updated?.fields ?? nextFields }));
     } catch (e) {
-      setError(e?.message || "Не удалось сохранить поля");
+      setError(e?.message || L.errors.saveFieldsFailed);
     } finally {
       setSaving(false);
     }
@@ -87,11 +153,10 @@ export default function InventoryDetails() {
     setSaving(true);
     setError("");
     try {
-      // ВАЖНО: не перезаписываем локальный state ответом бэка — это и вызывало «самоизменение» инпутов
+      // Не трогаем локальный state ответом бэка — onChange выше уже синхронизировал UI
       await inventoryService.update(inventory._id, { customIdFormat: nextCfg });
-      // локальный state уже актуален через onChange сверху
     } catch (e) {
-      setError(e?.message || "Не удалось сохранить Custom ID");
+      setError(e?.message || L.errors.saveCustomIdFailed);
     } finally {
       setSaving(false);
     }
@@ -102,12 +167,16 @@ export default function InventoryDetails() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link to="/inventories" className="text-sm text-blue-600 hover:underline">
-            &larr; All inventories
+            {L.back}
           </Link>
-          {inventory && <div className="text-xl font-semibold">{inventory.name || "Untitled inventory"}</div>}
+          {inventory && (
+            <div className="text-xl font-semibold">
+              {inventory.name || (lang === "ru" ? L.untitled : L.untitled)}
+            </div>
+          )}
         </div>
         <div className="text-sm opacity-70">
-          {saving ? "Saving…" : loading ? "Loading…" : null}
+          {saving ? L.saving : loading ? L.loading : null}
         </div>
       </div>
 
@@ -120,9 +189,9 @@ export default function InventoryDetails() {
       <Tabs tabs={TAB_VALUES} value={activeTab} onChange={setTab} />
 
       {loading ? (
-        <div className="mt-6 text-sm opacity-70">Loading inventory…</div>
+        <div className="mt-6 text-sm opacity-70">{L.loadingInventory}</div>
       ) : !inventory ? (
-        <div className="mt-6 text-sm text-red-700">Inventory not found.</div>
+        <div className="mt-6 text-sm text-red-700">{L.notFound}</div>
       ) : (
         <div className="mt-6">
           {activeTab === "items" && <ItemsTab inventory={inventory} />}
@@ -132,7 +201,9 @@ export default function InventoryDetails() {
           {activeTab === "custom-id" && (
             <CustomIdTab
               value={inventory.customIdFormat || { enabled: true, separator: "-", elements: [] }}
-              onChange={(cfg) => setInventory((prev) => ({ ...(prev || {}), customIdFormat: cfg }))}
+              onChange={(cfg) =>
+                setInventory((prev) => ({ ...(prev || {}), customIdFormat: cfg }))
+              }
               onSave={handleSaveCustomId}
               disabled={saving}
               sampleFields={sampleFields}
