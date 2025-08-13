@@ -2,6 +2,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { itemsService } from '../../services/itemsService';
 import ItemForm from './ItemForm';
+import LikeButton from '../LikeButton';               // ⬅️ добавлено
+import { likeService } from '../../services/likeService'; // ⬅️ добавлено
 
 function fmtDate(s) {
   try {
@@ -35,6 +37,9 @@ export default function ItemsTab({ inventory }) {
   const [sel, setSel] = useState(() => new Set()); // selected ids
   const [error, setError] = useState('');
 
+  // Лайки: id -> { count, liked, loading }
+  const [likes, setLikes] = useState({});
+
   // Модалки создания/редактирования
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -60,6 +65,36 @@ export default function ItemsTab({ inventory }) {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [inventory?._id, limit, offset]);
 
+  // Подгружаем лайки для видимых строк (лениво)
+  useEffect(() => {
+    let dead = false;
+    (async () => {
+      const missing = (rows || []).filter(r => !likes[r._id]);
+      if (missing.length === 0) return;
+
+      // помечаем loading
+      setLikes(prev => {
+        const next = { ...prev };
+        for (const r of missing) next[r._id] = { count: 0, liked: false, loading: true };
+        return next;
+      });
+
+      // батч-параллель
+      await Promise.all(missing.map(async (r) => {
+        try {
+          const data = await likeService.getLikes(r._id, token);
+          if (dead) return;
+          setLikes(prev => ({ ...prev, [r._id]: { count: data.count || 0, liked: !!data.liked, loading: false } }));
+        } catch {
+          if (dead) return;
+          setLikes(prev => ({ ...prev, [r._id]: { count: 0, liked: false, loading: false } }));
+        }
+      }));
+    })();
+    return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
+
   function toggleAll(e) {
     if (e.target.checked) {
       setSel(new Set(rows.map(r => r._id)));
@@ -82,6 +117,12 @@ export default function ItemsTab({ inventory }) {
     try {
       await itemsService.bulkRemove(Array.from(sel), token);
       setSel(new Set());
+      // чистим кэш лайков для удалённых
+      setLikes(prev => {
+        const next = { ...prev };
+        for (const id of sel) delete next[id];
+        return next;
+      });
       await load();
     } catch (e) {
       setError(e?.message || 'Bulk delete failed');
@@ -119,6 +160,11 @@ export default function ItemsTab({ inventory }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Обновляем локальный кэш лайков по сигналу из LikeButton
+  function onLikeChange(itemId, next) {
+    setLikes(prev => ({ ...prev, [itemId]: { ...(prev[itemId] || {}), ...next, loading: false } }));
   }
 
   return (
@@ -170,37 +216,55 @@ export default function ItemsTab({ inventory }) {
                 />
               </th>
               <th className="p-3 text-left">Custom ID</th>
+              <th className="p-3 text-left w-24">Likes</th> {/* ⬅️ новая колонка */}
               <th className="p-3 text-left">Fields</th>
               <th className="p-3 text-left">Created</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr
-                key={r._id}
-                className="border-t hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
-                onClick={(e) => {
-                  // Не триггерим по клику на checkbox
-                  if (e.target?.tagName?.toLowerCase() === 'input') return;
-                  setEditItem(r);
-                }}
-              >
-                <td className="p-3">
-                  <input
-                    type="checkbox"
-                    checked={sel.has(r._id)}
-                    onChange={() => toggleOne(r._id)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </td>
-                <td className="p-3 font-mono">{r.custom_id}</td>
-                <td className="p-3"><FieldsPreview fields={r.fields} /></td>
-                <td className="p-3">{fmtDate(r.created_at)}</td>
-              </tr>
-            ))}
+            {rows.map((r) => {
+              const lk = likes[r._id] || { count: 0, liked: false, loading: true };
+              return (
+                <tr
+                  key={r._id}
+                  className="border-t hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                  onClick={(e) => {
+                    // Не триггерим по клику на interactive элементы
+                    const tag = e.target?.tagName?.toLowerCase();
+                    if (tag === 'input' || tag === 'button' || tag === 'svg' || tag === 'path') return;
+                    setEditItem(r);
+                  }}
+                >
+                  <td className="p-3">
+                    <input
+                      type="checkbox"
+                      checked={sel.has(r._id)}
+                      onChange={() => toggleOne(r._id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </td>
+
+                  <td className="p-3 font-mono">{r.custom_id}</td>
+
+                  {/* Likes cell */}
+                  <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                    <LikeButton
+                      itemId={r._id}
+                      initialCount={lk.count}
+                      initialLiked={lk.liked}
+                      disabled={loading === 'saving' || lk.loading}
+                      onChange={(next) => onLikeChange(r._id, next)} // {count, liked}
+                    />
+                  </td>
+
+                  <td className="p-3"><FieldsPreview fields={r.fields} /></td>
+                  <td className="p-3">{fmtDate(r.created_at)}</td>
+                </tr>
+              );
+            })}
             {rows.length === 0 && (
               <tr>
-                <td className="p-4 text-center opacity-60" colSpan={4}>
+                <td className="p-4 text-center opacity-60" colSpan={5}>
                   No items yet
                 </td>
               </tr>
