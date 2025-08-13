@@ -1,92 +1,78 @@
+// src/components/LikeButton.jsx
 import React, { useEffect, useState } from 'react';
-import { likesApi } from '../services/likes';
-
-const I18N = {
-  ru: { like: 'Нравится', liked: 'Вы поставили лайк' },
-  en: { like: 'Like', liked: 'You liked this' },
-};
+import { likeService } from '../services/likeService';
 
 export default function LikeButton({
   itemId,
-  initialCount,
-  initiallyLiked,
-  disabled,
-  lang = localStorage.getItem('lang') || 'ru',
-  className = '',
+  initialCount = 0,
+  initialLiked = false,
+  disabled = false,
+  onChange,          // (next: { count, liked }) => void
 }) {
-  const t = I18N[lang] || I18N.ru;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
-  const [count, setCount] = useState(initialCount ?? 0);
-  const [liked, setLiked] = useState(!!initiallyLiked);
-  const [loading, setLoading] = useState(false);
-  const [loaded, setLoaded] = useState(initialCount != null || initiallyLiked != null);
+  const [count, setCount] = useState(initialCount);
+  const [liked, setLiked] = useState(initialLiked);
+  const [pending, setPending] = useState(false);
 
+  // ресет при смене элемента или входных значений
   useEffect(() => {
-    let dead = false;
-    if (loaded) return;
-    (async () => {
-      try {
-        const data = await likesApi.get(itemId);
-        if (!dead) {
-          if (typeof data.count === 'number') setCount(data.count);
-          if (typeof data.liked === 'boolean') setLiked(data.liked);
-          setLoaded(true);
-        }
-      } catch {
-        // молча — лайки не критичны
-        if (!dead) setLoaded(true);
-      }
-    })();
-    return () => { dead = true; };
-  }, [itemId, loaded]);
+    setCount(initialCount);
+    setLiked(initialLiked);
+    setPending(false);
+  }, [itemId, initialCount, initialLiked]);
 
-  async function toggle() {
-    if (disabled || loading) return;
-    setLoading(true);
+  async function handleClick(e) {
+    e.stopPropagation(); // не открывать модалку строки
+    if (disabled || pending) return;
 
-    const prevLiked = liked;
-    const prevCount = count;
+    const nextLiked = !liked;
+    const prev = { count, liked };
 
     // оптимистично
-    const nextLiked = !prevLiked;
     setLiked(nextLiked);
-    setCount(prev => prev + (nextLiked ? 1 : -1));
+    setCount((c) => c + (nextLiked ? 1 : -1));
+    setPending(true);
 
     try {
-      const resp = nextLiked ? await likesApi.like(itemId) : await likesApi.unlike(itemId);
-      if (typeof resp.count === 'number') setCount(resp.count);
-      if (typeof resp.liked === 'boolean') setLiked(resp.liked);
-    } catch (e) {
-      // откат
-      setLiked(prevLiked);
-      setCount(prevCount);
+      if (nextLiked) await likeService.like(itemId, token);
+      else await likeService.unlike(itemId, token);
+      onChange?.({ count: prev.count + (nextLiked ? 1 : -1), liked: nextLiked });
+    } catch (err) {
+      // откат при ошибке
+      setLiked(prev.liked);
+      setCount(prev.count);
+      console.error('Like toggle failed:', err?.message || err);
     } finally {
-      setLoading(false);
+      setPending(false);
     }
   }
 
   return (
     <button
       type="button"
-      onClick={toggle}
-      disabled={disabled || loading}
-      className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-sm ${liked ? 'border-pink-300 bg-pink-50 text-pink-700' : 'border-zinc-300 bg-white text-zinc-700'} disabled:opacity-50 ${className}`}
-      title={liked ? t.liked : t.like}
+      onClick={handleClick}
+      disabled={disabled || pending}
       aria-pressed={liked}
+      title={liked ? 'Unlike' : 'Like'}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 border
+        ${liked ? 'border-pink-300 bg-pink-50 text-pink-600' : 'border-zinc-200 bg-white text-zinc-700'}
+        disabled:opacity-50`}
     >
-      {/* heart icon */}
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill={liked ? 'currentColor' : 'none'}
-        stroke="currentColor"
-        strokeWidth="2"
-        aria-hidden="true"
-      >
-        <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 22l7.8-8.6 1-1a5.5 5.5 0 0 0 0-7.8Z" />
-      </svg>
-      <span className="tabular-nums">{count}</span>
+      <HeartIcon filled={liked} />
+      <span className="min-w-[1.5rem] text-sm tabular-nums">{count}</span>
     </button>
+  );
+}
+
+function HeartIcon({ filled }) {
+  return (
+    <svg
+      width="18" height="18" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"></path>
+    </svg>
   );
 }
