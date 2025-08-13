@@ -1,4 +1,3 @@
-// src/components/LikeButton.jsx
 import React, { useEffect, useState } from 'react';
 import { likeService } from '../services/likeService';
 import { getToken } from '../api/token';
@@ -8,12 +7,11 @@ export default function LikeButton({
   initialCount = 0,
   initialLiked = false,
   disabled = false,
-  onChange, // (next: { count, liked }) => void
+  onChange,
 }) {
   const [count, setCount] = useState(initialCount);
   const [liked, setLiked] = useState(initialLiked);
   const [pending, setPending] = useState(false);
-  const authed = Boolean(getToken());
 
   // Подтягиваем актуальные лайки при монтировании/смене itemId
   useEffect(() => {
@@ -25,7 +23,7 @@ export default function LikeButton({
         setCount(Number(data?.count || 0));
         setLiked(Boolean(data?.liked));
       } catch {
-        // молча — лайки не критичны для отображения
+        // не критично для UI
       }
     })();
     return () => { dead = true; };
@@ -33,23 +31,20 @@ export default function LikeButton({
 
   const doToggle = async () => {
     if (disabled || pending) return;
-    if (!authed) {
-      // Можно заменить на показ модалки логина
-      alert('Войдите, чтобы ставить лайки');
-      return;
-    }
+
     setPending(true);
     try {
       const data = liked
         ? await likeService.unlike(itemId)
         : await likeService.like(itemId);
 
-      setCount(Number(data?.count || 0));
-      setLiked(Boolean(data?.liked));
-      onChange?.({ count: Number(data?.count || 0), liked: Boolean(data?.liked) });
+      const next = { count: Number(data?.count || 0), liked: Boolean(data?.liked) };
+      setCount(next.count);
+      setLiked(next.liked);
+      onChange?.(next);
     } catch (e) {
-      // Если токен протух → 401. Дадим сигнал пользователю.
-      alert('Не удалось изменить лайк. Возможно, истёк вход — войдите заново.');
+      // Варианты причин: токен протух, cookie не пришла из-за CORS, сессия неактивна
+      alert('Не удалось изменить лайк. Проверьте вход или обновите страницу.');
     } finally {
       setPending(false);
     }
@@ -64,7 +59,7 @@ export default function LikeButton({
                   ${liked ? 'text-rose-600 border-rose-600' : 'text-gray-700 border-gray-300'}
                   disabled:opacity-50`}
       aria-pressed={liked}
-      title={authed ? (liked ? 'Убрать лайк' : 'Поставить лайк') : 'Войдите, чтобы ставить лайки'}
+      title={liked ? 'Убрать лайк' : 'Поставить лайк'}
     >
       <HeartIcon filled={liked} />
       <span>{count}</span>

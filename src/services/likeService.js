@@ -9,7 +9,7 @@ export const likeService = {
 
   async like(itemId) {
     const { data } = await http.post(`/items/${itemId}/like`, null, {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
     });
     return data; // { ok: true, count, liked: true }
   },
