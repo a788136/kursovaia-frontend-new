@@ -1,27 +1,21 @@
 // src/services/likeService.js
 import http from '../api/http';
 
-const authHeader = (token) => token ? { Authorization: `Bearer ${token}` } : {};
-
 export const likeService = {
-  async getLikes(itemId, token) {
-    const { data } = await http.get(`/items/${itemId}/likes`, {
-      headers: { ...authHeader(token) }
-    });
+  async getLikes(itemId) {
+    const { data } = await http.get(`/items/${itemId}/likes`);
     return data; // { count, liked }
   },
 
-  async like(itemId, token) {
+  async like(itemId) {
     const { data } = await http.post(`/items/${itemId}/like`, null, {
-      headers: { 'Content-Type': 'application/json', ...authHeader(token) }
+      headers: { 'Content-Type': 'application/json' }
     });
-    return data; // { count, liked: true }
+    return data; // { ok: true, count, liked: true }
   },
 
-  async unlike(itemId, token) {
-    const { data } = await http.delete(`/items/${itemId}/like`, {
-      headers: { ...authHeader(token) }
-    });
-    return data; // { count, liked: false }
+  async unlike(itemId) {
+    const { data } = await http.delete(`/items/${itemId}/like`);
+    return data; // { ok: true, count, liked: false }
   },
 };

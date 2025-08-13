@@ -5,6 +5,7 @@ import ItemForm from './ItemForm';
 import LikeButton from '../LikeButton';               // <— добавлено
 import { likeService } from '../../services/likeService'; // <— добавлено
 
+
 function fmtDate(s) {
   try {
     const d = new Date(s);
