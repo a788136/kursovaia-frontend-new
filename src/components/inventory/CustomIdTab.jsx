@@ -43,13 +43,10 @@ const I18N = {
       date: "Дата/время",
     },
     descr: {
-      fixed:
-        "Неизменяемый кусочек текста. Можно использовать Unicode-эмодзи.",
-      rand20:
-        "Случайное значение. Например, шесть десятичных (D6) или 5 шестнадцатеричных (X5).",
+      fixed: "Неизменяемый кусочек текста. Можно использовать Unicode-эмодзи.",
+      rand20: "Случайное значение. Например, шесть десятичных (D6) или 5 шестнадцатеричных (X5).",
       seq: "Последовательный индекс. С ведущими нулями (D4) или без них (D).",
-      date:
-        "Дата/время создания. Например, сокращённый день недели (ddd).",
+      date: "Дата/время создания. Например, сокращённый день недели (ddd).",
     },
     helpTail: {
       rand20:
@@ -86,13 +83,10 @@ const I18N = {
       date: "Date/time",
     },
     descr: {
-      fixed:
-        "A piece of unchanging text. You can use Unicode emoji.",
-      rand20:
-        "A random value. E.g., six-digit decimal (D6) or five-digit hex (X5).",
+      fixed: "A piece of unchanging text. You can use Unicode emoji.",
+      rand20: "A random value. E.g., six-digit decimal (D6) or five-digit hex (X5).",
       seq: "A sequential index. With leading zeros (D4) or without them (D).",
-      date:
-        "Item creation date/time. E.g., abbreviated day of week (ddd).",
+      date: "Item creation date/time. E.g., abbreviated day of week (ddd).",
     },
     helpTail: {
       rand20:
@@ -125,7 +119,6 @@ function normalizeInitial(val) {
 
 /* ---------- preview helpers (stable) ---------- */
 
-// Форматируем 20-битное число согласно fmt, не генеря новый рандом
 function formatRand20(base20, fmt = "X5_") {
   const suffix = fmt.endsWith("_") ? "_" : "";
   if (/^X5_?$/i.test(fmt)) {
@@ -142,7 +135,7 @@ function formatRand20(base20, fmt = "X5_") {
 function datePreviewAt(d, fmt = "yyyy") {
   if (fmt == null) return "";
   const s = String(fmt);
-  if (!/[yMdHhms]/i.test(s)) return s; // нет токенов — вернуть как есть
+  if (!/[yMdHhms]/i.test(s)) return s;
 
   const map = {
     yyyy: d.getFullYear().toString(),
@@ -216,17 +209,15 @@ function Row({
   onDragStart,
   onDragOver,
   onDrop,
-  onDraftChange,     // сообщает текущий ввод наверх
-  i18n,              // перевод
+  onDraftChange,
+  i18n,
 }) {
   const [showHelp, setShowHelp] = useState(false);
 
-  // локальный буфер ввода
   const toStr = () => (el.type === "fixed" ? (el.value ?? "") : (el.fmt ?? ""));
   const [text, setText] = useState(toStr());
   const keyRef = useRef(`${el.id}|${el.type}`);
 
-  // синхронизация только при смене структуры
   useEffect(() => {
     const nextKey = `${el.id}|${el.type}`;
     if (nextKey !== keyRef.current) {
@@ -240,7 +231,7 @@ function Row({
 
   function commit(v) {
     setText(v);
-    onDraftChange?.(el.id, v); // мгновенно влияет на Example
+    onDraftChange?.(el.id, v);
     if (el.type === "fixed") onChange({ ...el, value: v });
     else onChange({ ...el, fmt: v });
   }
@@ -263,16 +254,31 @@ function Row({
           ↕
         </button>
 
-        {/* type select */}
+        {/* type select (ИСПРАВЛЕНО: без commit, не перезатираем тип) */}
         <select
           className="rounded-xl border px-3 py-2 min-w-[180px]"
           value={el.type}
           onChange={(e) => {
             const t = e.target.value;
-            if (t === "fixed") { onChange({ id: el.id, type: t, value: "" }); commit(""); }
-            if (t === "rand20"){ onChange({ id: el.id, type: t, fmt: "X5_" }); commit("X5_"); }
-            if (t === "seq")   { onChange({ id: el.id, type: t, fmt: "D3"  }); commit("D3"); }
-            if (t === "date")  { onChange({ id: el.id, type: t, fmt: "yyyy"}); commit("yyyy"); }
+            let newEl;
+            if (t === "fixed") {
+              newEl = { id: el.id, type: t, value: "" };
+              setText("");
+              onDraftChange?.(el.id, "");
+            } else if (t === "rand20") {
+              newEl = { id: el.id, type: t, fmt: "X5_" };
+              setText("X5_");
+              onDraftChange?.(el.id, "X5_");
+            } else if (t === "seq") {
+              newEl = { id: el.id, type: t, fmt: "D3" };
+              setText("D3");
+              onDraftChange?.(el.id, "D3");
+            } else {
+              newEl = { id: el.id, type: "date", fmt: "yyyy" };
+              setText("yyyy");
+              onDraftChange?.(el.id, "yyyy");
+            }
+            onChange(newEl); // один корректный вызов, тип не откатывается
           }}
         >
           {["fixed", "rand20", "seq", "date"].map((v) => (
@@ -349,7 +355,7 @@ export default function CustomIdTab({
   onChange,
   onSave,
   disabled,
-  lang: langProp,            // опционально можно прокинуть сверху
+  lang: langProp,
 }) {
   const lang = (langProp || localStorage.getItem("lang") || "ru") in I18N
     ? (langProp || localStorage.getItem("lang") || "ru")
@@ -367,7 +373,7 @@ export default function CustomIdTab({
   const sampleDateRef = useRef(new Date());   // фиксированная дата для превью
   const draftsRef = useRef(new Map());        // id -> current input text
 
-  // sync external value (строго по реальному отличию)
+  // sync external value
   useEffect(() => {
     setCfg((prev) => {
       const ext = JSON.stringify(normalizeInitial(value) || {});
