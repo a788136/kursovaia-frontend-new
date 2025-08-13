@@ -254,7 +254,7 @@ function Row({
           ↕
         </button>
 
-        {/* type select (ИСПРАВЛЕНО: без commit, не перезатираем тип) */}
+        {/* type select */}
         <select
           className="rounded-xl border px-3 py-2 min-w-[180px]"
           value={el.type}
@@ -278,7 +278,7 @@ function Row({
               setText("yyyy");
               onDraftChange?.(el.id, "yyyy");
             }
-            onChange(newEl); // один корректный вызов, тип не откатывается
+            onChange(newEl);
           }}
         >
           {["fixed", "rand20", "seq", "date"].map((v) => (
@@ -298,15 +298,17 @@ function Row({
           onChange={(e) => commit(e.target.value)}
         />
 
-        {/* emoji quick insert for Fixed */}
-        <button
-          type="button"
-          className="rounded-xl border px-2 py-2"
-          title={i18n.titles.insertEmoji}
-          onClick={() => el.type === "fixed" && commit((text || "") + "📚")}
-        >
-          😊
-        </button>
+        {/* emoji quick insert — показываем ТОЛЬКО для fixed */}
+        {el.type === "fixed" && (
+          <button
+            type="button"
+            className="rounded-xl border px-2 py-2"
+            title={i18n.titles.insertEmoji}
+            onClick={() => commit((text || "") + "📚")}
+          >
+            😊
+          </button>
+        )}
 
         {/* help */}
         <button
