@@ -1,3 +1,4 @@
+// src/components/UserMenu.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -6,10 +7,12 @@ export default function UserMenu({ user, onLogout, lang = 'ru' }) {
   const navigate = useNavigate();
 
   const t = {
-    ru: { profile: 'Профиль', logout: 'Выйти' },
-    en: { profile: 'Profile', logout: 'Log out' }
+    ru: { profile: 'Профиль', admin: 'Админка', logout: 'Выйти' },
+    en: { profile: 'Profile', admin: 'Admin', logout: 'Log out' }
   };
   const L = t[lang] || t.ru;
+
+  const isAdmin = !!(user?.isAdmin || user?.role === 'admin');
 
   return (
     <div className="relative">
@@ -40,6 +43,18 @@ export default function UserMenu({ user, onLogout, lang = 'ru' }) {
           >
             {L.profile}
           </button>
+
+          {isAdmin && (
+            <button
+              className="cursor-pointer mt-1 block w-full text-left rounded-md px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
+              onClick={() => {
+                setOpen(false);
+                navigate('/admin');
+              }}
+            >
+              {L.admin}
+            </button>
+          )}
 
           <button
             onClick={onLogout}
