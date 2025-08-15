@@ -5,7 +5,6 @@ import ItemForm from './ItemForm';
 import LikeButton from '../LikeButton';               // <— добавлено
 import { likeService } from '../../services/likeService'; // <— добавлено
 
-
 function fmtDate(s) {
   try {
     const d = new Date(s);
@@ -235,7 +234,9 @@ export default function ItemsTab({ inventory }) {
                   </td>
                   <td className="p-3 font-mono">{r.custom_id}</td>
                   <td className="p-3"><FieldsPreview fields={r.fields} /></td>
-                  <td className="p-3">
+
+                  {/* ВАЖНО: глушим всплытие клика из зоны лайка */}
+                  <td className="p-3" onClick={(e) => e.stopPropagation()}>
                     <LikeButton
                       itemId={r._id}
                       initialCount={likeState.count}
@@ -251,6 +252,7 @@ export default function ItemsTab({ inventory }) {
                       }}
                     />
                   </td>
+
                   <td className="p-3">{fmtDate(r.created_at)}</td>
                 </tr>
               );
