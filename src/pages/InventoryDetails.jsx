@@ -195,7 +195,8 @@ export default function InventoryDetails({ user, lang: langProp }) {
       ) : (
         <div className="mt-6">
           {activeTab === "items" && <ItemsTab inventory={inventory} />}
-          {activeTab === "chat" && <ChatTab inventory={inventory} />}
+          {/* ПРОКИНУЛ user В ЧАТ, остальное без изменений */}
+          {activeTab === "chat" && <ChatTab inventory={inventory} user={user} />}
           {activeTab === "settings" && <SettingsTab inventory={inventory} />}
 
           {activeTab === "custom-id" && (
