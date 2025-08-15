@@ -9,6 +9,8 @@ import ProfilePage from './pages/ProfilePage';
 import AllInventories from './pages/AllInventories';
 import InventoryDetails from './pages/InventoryDetails';
 import InventoryEdit from './pages/InventoryEdit';
+import RequireAdmin from './components/routing/RequireAdmin';
+import AdminPanel from './pages/AdminPanel';
 
 function ProtectedRoute({ isAuthed, children }) {
   if (!isAuthed) return <Navigate to="/" replace />;
@@ -123,6 +125,14 @@ export default function App() {
 
           {/* Фолбэк */}
           <Route path="*" element={<Navigate to="/" replace />} />
+          <Route
+            path="/admin"
+            element={
+              <RequireAdmin user={user}>
+                <AdminPanel user={user} />
+              </RequireAdmin>
+            }
+          />
         </Routes>
       </main>
     </div>
