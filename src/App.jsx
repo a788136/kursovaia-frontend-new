@@ -32,7 +32,8 @@ export default function App() {
       const token = q.get('token');
       if (token) {
         setToken(token);
-        history.replaceState(null, '', '/');
+        // маленький фикс: используем window.history
+        window.history.replaceState(null, '', '/');
         navigate('/', { replace: true });
       }
     }
@@ -41,12 +42,15 @@ export default function App() {
   // Тема
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
+    if (theme === 'dark') root.classList.add('dark');
+    else root.classList.remove('dark');
     localStorage.setItem('theme', theme);
   }, [theme]);
 
   // Язык
-  useEffect(() => { localStorage.setItem('lang', lang); }, [lang]);
+  useEffect(() => {
+    localStorage.setItem('lang', lang);
+  }, [lang]);
 
   // Проверяем текущего пользователя по JWT
   useEffect(() => {
@@ -74,7 +78,13 @@ export default function App() {
     en: { welcome: 'Welcome!', needLogin: 'Please sign in.' }
   }), []);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">Загрузка...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-500">
+        Загрузка...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -92,39 +102,47 @@ export default function App() {
 
       <main className="mx-auto max-w-5xl px-4 py-10">
         <Routes>
-          <Route path="/" element={
-            <HomePage
-              user={user}
-              lang={lang}
-              t={t}
-              onLoggedIn={(u) => {
-                setUser(u);
-                navigate('/', { replace: true });
-              }}
-            />
-          } />
+          <Route
+            path="/"
+            element={
+              <HomePage
+                user={user}
+                lang={lang}
+                t={t}
+                onLoggedIn={(u) => {
+                  setUser(u);
+                  navigate('/', { replace: true });
+                }}
+              />
+            }
+          />
 
           {/* Список */}
           <Route path="/inventories" element={<AllInventories />} />
 
           {/* Страница инвентаризации */}
-          <Route path="/inventories/:id" element={<InventoryDetails user={user} lang={lang}/>} />
+          <Route path="/inventories/:id" element={<InventoryDetails user={user} lang={lang} />} />
 
           {/* Отдельная страница редактирования */}
-          <Route path="/inventories/:id/edit" element={
-            <ProtectedRoute isAuthed={!!user}>
-              <InventoryEdit user={user} />
-            </ProtectedRoute>
-          } />
+          <Route
+            path="/inventories/:id/edit"
+            element={
+              <ProtectedRoute isAuthed={!!user}>
+                <InventoryEdit user={user} />
+              </ProtectedRoute>
+            }
+          />
 
-          <Route path="/profile" element={
-            <ProtectedRoute isAuthed={!!user}>
-              <ProfilePage user={user} />
-            </ProtectedRoute>
-          } />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute isAuthed={!!user}>
+                <ProfilePage user={user} />
+              </ProtectedRoute>
+            }
+          />
 
-          {/* Фолбэк */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* Страница администратора */}
           <Route
             path="/admin"
             element={
@@ -133,6 +151,9 @@ export default function App() {
               </RequireAdmin>
             }
           />
+
+          {/* Фолбэк */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
     </div>
