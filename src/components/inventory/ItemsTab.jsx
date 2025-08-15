@@ -2,8 +2,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { itemsService } from '../../services/itemsService';
 import ItemForm from './ItemForm';
-import LikeButton from '../LikeButton';               // <— добавлено
-import { likeService } from '../../services/likeService'; // <— добавлено
+import LikeButton from '../LikeButton';
+import { likeService } from '../../services/likeService';
 
 function fmtDate(s) {
   try {
@@ -65,12 +65,11 @@ export default function ItemsTab({ inventory }) {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [inventory?._id, limit, offset]);
 
-  // Подгружаем лайки для текущих строк в таблице
+  // Подгружаем лайки для текущих строк
   useEffect(() => {
     let dead = false;
     async function hydrateLikes() {
       if (!rows.length) return;
-      // Параллельная загрузка
       const promises = rows.map(async (r) => {
         try {
           const data = await likeService.getLikes(r._id, token);
@@ -167,7 +166,7 @@ export default function ItemsTab({ inventory }) {
             type="button"
             className="rounded-xl bg-violet-600 text-white px-4 py-2 disabled:opacity-50"
             onClick={() => setShowCreate(true)}
-            disabled={loading === 'saving'}
+            disabled={submitting}
           >
             New item
           </button>
@@ -176,7 +175,7 @@ export default function ItemsTab({ inventory }) {
             type="button"
             className="rounded-xl border px-4 py-2 disabled:opacity-50"
             onClick={handleBulkDelete}
-            disabled={sel.size === 0 || loading === 'saving'}
+            disabled={sel.size === 0 || submitting}
             title={sel.size === 0 ? 'Select rows to delete' : `Delete ${sel.size} selected`}
           >
             Delete selected
@@ -184,7 +183,7 @@ export default function ItemsTab({ inventory }) {
         </div>
 
         <div className="text-sm opacity-70">
-          {loading === true ? 'Loading…' : loading === 'saving' ? 'Saving…' : null}
+          {loading === true ? 'Loading…' : submitting ? 'Saving…' : null}
         </div>
       </div>
 
@@ -194,78 +193,93 @@ export default function ItemsTab({ inventory }) {
         </div>
       )}
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border">
-        <table className="min-w-full text-sm">
-          <thead className="bg-zinc-50 dark:bg-zinc-800">
-            <tr>
-              <th className="p-3 w-10">
-                <input
-                  type="checkbox"
-                  checked={rows.length > 0 && sel.size === rows.length}
-                  onChange={toggleAll}
-                />
-              </th>
-              <th className="p-3 text-left">Custom ID</th>
-              <th className="p-3 text-left">Fields</th>
-              <th className="p-3 text-left w-28">Likes</th>{/* <— новая колонка */}
-              <th className="p-3 text-left">Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const likeState = likesById.get(r._id) || { count: 0, liked: false };
-              return (
-                <tr
-                  key={r._id}
-                  className="border-t hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
-                  onClick={(e) => {
-                    if (e.target?.tagName?.toLowerCase() === 'input') return;
-                    setEditItem(r);
-                  }}
-                >
-                  <td className="p-3">
-                    <input
-                      type="checkbox"
-                      checked={sel.has(r._id)}
-                      onChange={() => toggleOne(r._id)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </td>
-                  <td className="p-3 font-mono">{r.custom_id}</td>
-                  <td className="p-3"><FieldsPreview fields={r.fields} /></td>
+      {/* Табличный вид на div'ах */}
+      <div className="overflow-x-auto rounded-2xl border" role="table" aria-label="Items">
+        {/* Заголовок */}
+        <div
+          role="row"
+          className="grid items-center bg-zinc-50 dark:bg-zinc-800 text-left text-sm font-medium
+                     min-w-max
+                     [grid-template-columns:2.5rem_minmax(10rem,1fr)_minmax(14rem,2fr)_7rem_minmax(10rem,1fr)]"
+        >
+          <div role="columnheader" className="p-3">
+            <input
+              type="checkbox"
+              checked={rows.length > 0 && sel.size === rows.length}
+              onChange={toggleAll}
+              aria-label="Select all"
+            />
+          </div>
+          <div role="columnheader" className="p-3">Custom ID</div>
+          <div role="columnheader" className="p-3">Fields</div>
+          <div role="columnheader" className="p-3">Likes</div>
+          <div role="columnheader" className="p-3">Created</div>
+        </div>
 
-                  {/* ВАЖНО: глушим всплытие клика из зоны лайка */}
-                  <td className="p-3" onClick={(e) => e.stopPropagation()}>
-                    <LikeButton
-                      itemId={r._id}
-                      initialCount={likeState.count}
-                      initialLiked={likeState.liked}
-                      disabled={loading === 'saving'}
-                      onChange={(next) => {
-                        // мгновенно сохраняем новое состояние, чтобы пропсы не «откатывали» кнопку
-                        setLikesById((prev) => {
-                          const m = new Map(prev);
-                          m.set(r._id, { count: next.count, liked: next.liked });
-                          return m;
-                        });
-                      }}
-                    />
-                  </td>
+        {/* Строки */}
+        <div role="rowgroup">
+          {rows.map((r) => {
+            const likeState = likesById.get(r._id) || { count: 0, liked: false };
+            return (
+              <div
+                key={r._id}
+                role="row"
+                className="grid items-center border-t hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer
+                           [grid-template-columns:2.5rem_minmax(10rem,1fr)_minmax(14rem,2fr)_7rem_minmax(10rem,1fr)]"
+                onClick={(e) => {
+                  const tag = e.target?.tagName?.toLowerCase();
+                  if (tag === 'input' || tag === 'button' || tag === 'svg' || tag === 'path') return;
+                  setEditItem(r);
+                }}
+              >
+                {/* checkbox */}
+                <div role="cell" className="p-3">
+                  <input
+                    type="checkbox"
+                    checked={sel.has(r._id)}
+                    onChange={() => toggleOne(r._id)}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Select ${r.custom_id}`}
+                  />
+                </div>
 
-                  <td className="p-3">{fmtDate(r.created_at)}</td>
-                </tr>
-              );
-            })}
-            {rows.length === 0 && (
-              <tr>
-                <td className="p-4 text-center opacity-60" colSpan={5}>
-                  No items yet
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                {/* Custom ID */}
+                <div role="cell" className="p-3 font-mono break-words">{r.custom_id}</div>
+
+                {/* Fields */}
+                <div role="cell" className="p-3"><FieldsPreview fields={r.fields} /></div>
+
+                {/* Likes — глушим всплытие */}
+                <div role="cell" className="p-3" onClick={(e) => e.stopPropagation()}>
+                  <LikeButton
+                    itemId={r._id}
+                    initialCount={likeState.count}
+                    initialLiked={likeState.liked}
+                    disabled={submitting}
+                    onChange={(next) => {
+                      setLikesById((prev) => {
+                        const m = new Map(prev);
+                        m.set(r._id, { count: next.count, liked: next.liked });
+                        return m;
+                      });
+                    }}
+                  />
+                </div>
+
+                {/* Created */}
+                <div role="cell" className="p-3">{fmtDate(r.created_at)}</div>
+              </div>
+            );
+          })}
+
+          {rows.length === 0 && (
+            <div role="row" className="border-t">
+              <div role="cell" className="p-4 text-center opacity-60 col-span-full">
+                No items yet
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Pagination */}
