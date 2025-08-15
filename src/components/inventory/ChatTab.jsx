@@ -1,5 +1,5 @@
 // src/components/inventory/ChatTab.jsx
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import ReactMarkdown from 'react-markdown';
 import { io } from 'socket.io-client';
@@ -48,6 +48,9 @@ export default function ChatTab({ inventory, user }) {
   const [pending, setPending] = useState(false);
   const listRef = useRef(null);
 
+  // Множество уже добавленных сообщений (по id) для дедупликации
+  const seenIdsRef = useRef(new Set());
+
   const L = useMemo(() => ({
     title: 'Обсуждение',
     hint: 'Сообщения в реальном времени. Поддерживается Markdown.',
@@ -58,6 +61,25 @@ export default function ChatTab({ inventory, user }) {
     sendFailed: 'Не удалось отправить сообщение',
   }), []);
 
+  // Универсальная функция добавления сообщений с защитой от дублей
+  const addMessages = useCallback((arr) => {
+    if (!Array.isArray(arr) || !arr.length) return;
+    setItems((prev) => {
+      const next = [...prev];
+      for (const m of arr) {
+        const id = m?.id != null ? String(m.id) : '';
+        if (!id) continue; // у нас всегда есть id с бэка, но на всякий…
+        if (!seenIdsRef.current.has(id)) {
+          seenIdsRef.current.add(id);
+          next.push(m);
+        }
+      }
+      return next;
+    });
+    // автоскролл вниз
+    setTimeout(() => listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' }), 50);
+  }, []);
+
   // 1) начальная загрузка
   useEffect(() => {
     let dead = false;
@@ -65,7 +87,11 @@ export default function ChatTab({ inventory, user }) {
       if (!invId) return;
       try {
         const { items: list } = await discussionService.list(invId, { limit: 200 });
-        if (!dead) setItems(list || []);
+        if (dead) return;
+        // Инициализируем множество уже виденных id и состояние
+        const ids = new Set((list || []).map((m) => (m?.id != null ? String(m.id) : '')));
+        seenIdsRef.current = ids;
+        setItems(list || []);
         setTimeout(() => listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' }), 50);
       } catch (e) {
         if (!dead) setError(e?.message || L.loadFailed);
@@ -74,16 +100,13 @@ export default function ChatTab({ inventory, user }) {
     return () => { dead = true; };
   }, [invId, L.loadFailed]);
 
-  // 2) realtime по сокету
+  // 2) realtime по сокету — приходящие сообщения кладём через addMessages (дедуп)
   useEffect(() => {
     if (!socket) return;
-    const onNew = (msg) => {
-      setItems(prev => [...prev, msg]);
-      setTimeout(() => listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' }), 50);
-    };
+    const onNew = (msg) => addMessages([msg]);
     socket.on('discussion:new', onNew);
     return () => socket.off('discussion:new', onNew);
-  }, [socket]);
+  }, [socket, addMessages]);
 
   // 3) fallback polling (если WS не работает)
   useEffect(() => {
@@ -92,11 +115,11 @@ export default function ChatTab({ inventory, user }) {
       try {
         const last = items[items.length - 1];
         const { items: fresh } = await discussionService.list(invId, { after: last?.createdAt });
-        if (fresh?.length) setItems(prev => [...prev, ...fresh]);
+        addMessages(fresh || []);
       } catch {}
     }, 10000);
     return () => clearInterval(id);
-  }, [invId, items]);
+  }, [invId, items, addMessages]);
 
   async function handleSend(e) {
     e?.preventDefault?.();
@@ -106,9 +129,9 @@ export default function ChatTab({ inventory, user }) {
     setError('');
     try {
       const payload = await discussionService.create(invId, text);
-      setItems(prev => [...prev, payload]);
+      // Добавляем через общий путь с дедупликацией.
+      addMessages([payload]);
       setText('');
-      setTimeout(() => listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' }), 50);
     } catch (e) {
       setError(e?.message || L.sendFailed);
     } finally {
