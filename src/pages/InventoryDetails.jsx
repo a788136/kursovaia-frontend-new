@@ -1,6 +1,6 @@
 // src/pages/InventoryDetails.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link, useLocation, useNavigate, Routes, Route, Navigate } from "react-router-dom";
 import { getInventoryById } from "../services/inventories";
 import { inventoryService } from "../services/inventoryService";
 import Tabs from "../components/ui/Tabs";
@@ -13,10 +13,6 @@ import AccessTab from "../components/inventory/AccessTab";
 import StatsTab from "../components/inventory/StatsTab";
 import ExportTab from "../components/inventory/ExportTab";
 
-/**
- * Локальные переводы страницы. Если прилетит t/lang из App — можно будет
- * переключиться на централизованный словарь, но сейчас делаем автономно.
- */
 const DICT = {
   ru: {
     tabs: {
@@ -66,12 +62,22 @@ const DICT = {
   },
 };
 
+const TAB_SEGMENTS = {
+  items: "items",
+  chat: "discussion",
+  settings: "settings",
+  customId: "custom-id",
+  fields: "fields",
+  access: "access",
+  stats: "stats",
+  export: "export",
+};
+const SEGMENT_TO_TAB = Object.fromEntries(Object.entries(TAB_SEGMENTS).map(([k, v]) => [v, k]));
+
 export default function InventoryDetails({ user, lang: langProp }) {
-  // язык: из пропсов -> из localStorage -> ru
   const lang = (langProp || localStorage.getItem("lang") || "ru").toLowerCase().startsWith("en") ? "en" : "ru";
   const L = DICT[lang];
 
-  // табы с локализованными подписями (значения — прежние, чтобы ссылки и логика не ломались)
   const TAB_VALUES = useMemo(
     () => [
       { value: "items", label: L.tabs.items },
@@ -88,18 +94,39 @@ export default function InventoryDetails({ user, lang: langProp }) {
 
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [inventory, setInventory] = useState(null);
 
+  // Вычисляем активный таб по path (/inventories/:id/<segment>) или по ?tab= (бек.совместимость)
   const activeTab = useMemo(() => {
+    const seg = location.pathname.split('/').pop();
+    const fromPath = SEGMENT_TO_TAB[seg] || (location.pathname.endsWith(`/inventories/${id}`) ? 'items' : null);
+    if (fromPath) return fromPath;
     const t = searchParams.get("tab");
     return TAB_VALUES.some((x) => x.value === t) ? t : "items";
-  }, [searchParams, TAB_VALUES]);
+  }, [location.pathname, searchParams, TAB_VALUES, id]);
+
+  // При наличии ?tab= перенаправляем на сегмент пути (бек.совм.)
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t && TAB_VALUES.some(x => x.value === t)) {
+      const seg = TAB_SEGMENTS[t === 'chat' ? 'chat' : t] || 'items';
+      const url = seg === 'items' ? `/inventories/${id}` : `/inventories/${id}/${seg}`;
+      navigate(url, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, id]);
 
   function setTab(value) {
+    const seg = TAB_SEGMENTS[value === 'chat' ? 'chat' : value] || 'items';
+    const url = seg === 'items' ? `/inventories/${id}` : `/inventories/${id}/${seg}`;
+    navigate(url);
+    // Для полной совместимости можно ещё поддержать old ?tab=, но уже не требуется
     const next = new URLSearchParams(searchParams);
     next.set("tab", value);
     setSearchParams(next, { replace: true });
@@ -124,7 +151,6 @@ export default function InventoryDetails({ user, lang: langProp }) {
     };
   }, [id, L.errors.loadFailed]);
 
-  // Пример значений для предпросмотра блока "Поле" в Custom ID
   const sampleFields = useMemo(
     () => ({
       brand: "ACME",
@@ -153,7 +179,6 @@ export default function InventoryDetails({ user, lang: langProp }) {
     setSaving(true);
     setError("");
     try {
-      // Не трогаем локальный state ответом бэка — onChange выше уже синхронизировал UI
       await inventoryService.update(inventory._id, { customIdFormat: nextCfg });
     } catch (e) {
       setError(e?.message || L.errors.saveCustomIdFailed);
@@ -194,38 +219,47 @@ export default function InventoryDetails({ user, lang: langProp }) {
         <div className="mt-6 text-sm text-red-700">{L.notFound}</div>
       ) : (
         <div className="mt-6">
-          {activeTab === "items" && <ItemsTab inventory={inventory} />}
-          {/* Прокидываем user в ChatTab */}
-          {activeTab === "chat" && <ChatTab inventory={inventory} user={user} />}
-          {activeTab === "settings" && <SettingsTab inventory={inventory} />}
-
-          {activeTab === "custom-id" && (
-            <CustomIdTab
-              lang={lang}
-              value={inventory.customIdFormat || { enabled: true, separator: "-", elements: [] }}
-              onChange={(cfg) =>
-                setInventory((prev) => ({ ...(prev || {}), customIdFormat: cfg }))
+          {/* Внутренняя маршрутизация табов (совместима с /inventories/:id и /inventories/:id/<segment>) */}
+          <Routes>
+            <Route index element={<ItemsTab inventory={inventory} />} />
+            <Route path="items" element={<ItemsTab inventory={inventory} />} />
+            <Route path="discussion" element={<ChatTab inventory={inventory} user={user} />} />
+            <Route path="settings" element={<SettingsTab inventory={inventory} />} />
+            <Route
+              path="custom-id"
+              element={
+                <CustomIdTab
+                  lang={lang}
+                  value={inventory.customIdFormat || { enabled: true, separator: "-", elements: [] }}
+                  onChange={(cfg) =>
+                    setInventory((prev) => ({ ...(prev || {}), customIdFormat: cfg }))
+                  }
+                  onSave={handleSaveCustomId}
+                  disabled={saving}
+                  sampleFields={sampleFields}
+                  inventory={inventory}
+                />
               }
-              onSave={handleSaveCustomId}
-              disabled={saving}
-              sampleFields={sampleFields}
-              inventory={inventory}
             />
-          )}
-
-          {activeTab === "fields" && (
-            <FieldsTab
-              value={inventory.fields || []}
-              onChange={(next) => setInventory((prev) => ({ ...(prev || {}), fields: next }))}
-              onSave={handleSaveFields}
-              disabled={saving}
-              inventory={inventory}
+            <Route
+              path="fields"
+              element={
+                <FieldsTab
+                  value={inventory.fields || []}
+                  onChange={(next) => setInventory((prev) => ({ ...(prev || {}), fields: next }))}
+                  onSave={handleSaveFields}
+                  disabled={saving}
+                  inventory={inventory}
+                />
+              }
             />
-          )}
+            <Route path="access" element={<AccessTab inventory={inventory} user={user} />} />
+            <Route path="stats" element={<StatsTab inventory={inventory} />} />
+            <Route path="export" element={<ExportTab inventory={inventory} />} />
 
-          {activeTab === "access" && <AccessTab inventory={inventory} />}
-          {activeTab === "stats" && <StatsTab inventory={inventory} />}
-          {activeTab === "export" && <ExportTab inventory={inventory} />}
+            {/* На любые неизвестные подпути ведём на items */}
+            <Route path="*" element={<Navigate to={`/inventories/${id}`} replace />} />
+          </Routes>
         </div>
       )}
     </div>

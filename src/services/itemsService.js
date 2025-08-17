@@ -27,9 +27,36 @@ async function handle(res) {
 }
 
 export const itemsService = {
+  // Алиас для совместимости: itemsService.list(...) === getAll(...)
+  async list(inventoryId, params = {}, token) {
+    return this.getAll(inventoryId, params, token);
+  },
+
   async getAll(inventoryId, params = {}, token) {
-    const qs = new URLSearchParams(params).toString();
-    const res = await fetch(url(`/inventories/${encodeURIComponent(inventoryId)}/items${qs ? `?${qs}` : ''}`), {
+    // очищаем пустые параметры, чтобы URL был аккуратным
+    const clean = {};
+    Object.entries(params || {}).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '') return;
+      clean[k] = v;
+    });
+    const qs = new URLSearchParams(clean).toString();
+
+    const res = await fetch(
+      url(`/inventories/${encodeURIComponent(inventoryId)}/items${qs ? `?${qs}` : ''}`),
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          ...authHeaders(token),
+        },
+      }
+    );
+    return handle(res);
+  },
+
+  // НУЖНО для страницы /items/:itemId
+  async get(itemId, token) {
+    const res = await fetch(url(`/items/${encodeURIComponent(itemId)}`), {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -52,6 +79,7 @@ export const itemsService = {
     return handle(res);
   },
 
+  // Для оптимистической блокировки передаём { version, ...patch }
   async update(itemId, payload, token) {
     const res = await fetch(url(`/items/${encodeURIComponent(itemId)}`), {
       method: 'PUT',
