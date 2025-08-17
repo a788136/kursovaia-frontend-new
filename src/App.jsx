@@ -11,8 +11,6 @@ import InventoryDetails from './pages/InventoryDetails';
 import InventoryEdit from './pages/InventoryEdit';
 import RequireAdmin from './components/routing/RequireAdmin';
 import AdminPanel from './pages/AdminPanel';
-import ItemDetails from './pages/ItemDetails';
-import SearchResults from './pages/SearchResults';
 
 function ProtectedRoute({ isAuthed, children }) {
   if (!isAuthed) return <Navigate to="/" replace />;
@@ -26,7 +24,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // OAuth: #/oauth?token=...
+  // Считываем токен из hash после OAuth: #/oauth?token=...
   useEffect(() => {
     const hash = window.location.hash || '';
     if (hash.startsWith('#/oauth')) {
@@ -34,20 +32,27 @@ export default function App() {
       const token = q.get('token');
       if (token) {
         setToken(token);
+        // маленький фикс: используем window.history
         window.history.replaceState(null, '', '/');
         navigate('/', { replace: true });
       }
     }
   }, [navigate]);
 
+  // Тема
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
+    if (theme === 'dark') root.classList.add('dark');
+    else root.classList.remove('dark');
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  useEffect(() => { localStorage.setItem('lang', lang); }, [lang]);
+  // Язык
+  useEffect(() => {
+    localStorage.setItem('lang', lang);
+  }, [lang]);
 
+  // Проверяем текущего пользователя по JWT
   useEffect(() => {
     (async () => {
       try {
@@ -73,7 +78,13 @@ export default function App() {
     en: { welcome: 'Welcome!', needLogin: 'Please sign in.' }
   }), []);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">Загрузка...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-500">
+        Загрузка...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -91,48 +102,45 @@ export default function App() {
 
       <main className="mx-auto max-w-5xl px-4 py-10">
         <Routes>
-          <Route path="/" element={
-            <HomePage
-              user={user}
-              lang={lang}
-              t={t}
-              onLoggedIn={(u) => {
-                setUser(u);
-                navigate('/', { replace: true });
-              }}
-            />
-          } />
-
-          {/* Поиск */}
-          <Route path="/search" element={<SearchResults user={user} />} />
+          <Route
+            path="/"
+            element={
+              <HomePage
+                user={user}
+                lang={lang}
+                t={t}
+                onLoggedIn={(u) => {
+                  setUser(u);
+                  navigate('/', { replace: true });
+                }}
+              />
+            }
+          />
 
           {/* Список */}
           <Route path="/inventories" element={<AllInventories />} />
 
-          {/* Страница инвентаризации (внутри файла реализованы вложенные табы + поддержка ?tab=) */}
-          <Route path="/inventories/:id" element={<InventoryDetails user={user} lang={lang}/>} />
+          {/* Страница инвентаризации */}
+          <Route path="/inventories/:id" element={<InventoryDetails user={user} lang={lang} />} />
 
           {/* Отдельная страница редактирования */}
-          <Route path="/inventories/:id/edit" element={
-            <ProtectedRoute isAuthed={!!user}>
-              <InventoryEdit user={user} />
-            </ProtectedRoute>
-          } />
+          <Route
+            path="/inventories/:id/edit"
+            element={
+              <ProtectedRoute isAuthed={!!user}>
+                <InventoryEdit user={user} />
+              </ProtectedRoute>
+            }
+          />
 
-          {/* Страница айтема */}
-          <Route path="/items/:itemId" element={<ItemDetails user={user} />} />
-
-          {/* Профиль и write-access список */}
-          <Route path="/profile" element={
-            <ProtectedRoute isAuthed={!!user}>
-              <ProfilePage user={user} />
-            </ProtectedRoute>
-          } />
-          <Route path="/profile/write-access" element={
-            <ProtectedRoute isAuthed={!!user}>
-              <AllInventories key="write" /> {/* можно переиспользовать AllInventories, если он читает query */}
-            </ProtectedRoute>
-          } />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute isAuthed={!!user}>
+                <ProfilePage user={user} />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Страница администратора */}
           <Route
