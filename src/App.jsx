@@ -11,10 +11,11 @@ import InventoryDetails from './pages/InventoryDetails';
 import InventoryEdit from './pages/InventoryEdit';
 import RequireAdmin from './components/routing/RequireAdmin';
 import AdminPanel from './pages/AdminPanel';
+// ⬇️ ДОБАВЛЕНО: страница логина
 import LoginPage from './pages/LoginPage';
 
 function ProtectedRoute({ isAuthed, children }) {
-  if (!isAuthed) return <Navigate to="/login" replace />;
+  if (!isAuthed) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -25,7 +26,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Забираем токен из hash после OAuth: #/oauth?token=...
+  // Считываем токен из hash после OAuth: #/oauth?token=...
   useEffect(() => {
     const hash = window.location.hash || '';
     if (hash.startsWith('#/oauth')) {
@@ -33,7 +34,7 @@ export default function App() {
       const token = q.get('token');
       if (token) {
         setToken(token);
-        // аккуратный replace state (без history.push)
+        // важно: использовать window.history
         window.history.replaceState(null, '', '/');
         navigate('/', { replace: true });
       }
@@ -48,16 +49,14 @@ export default function App() {
   }, [theme]);
 
   // Язык
-  useEffect(() => {
-    localStorage.setItem('lang', lang);
-  }, [lang]);
+  useEffect(() => { localStorage.setItem('lang', lang); }, [lang]);
 
-  // Проверяем текущего пользователя по JWT
+  // Проверяем текущего пользователя по JWT/сессии
   useEffect(() => {
     (async () => {
       try {
         if (!getToken()) { setUser(null); return; }
-        const { data } = await http.get('/auth/me');
+        const { data } = await http.get('/auth/me', { withCredentials: true });
         if (data.authenticated) {
           setUser(data.user);
           if (data.user.theme) setTheme(data.user.theme);
@@ -117,28 +116,13 @@ export default function App() {
             }
           />
 
-          {/* новая страница логина */}
-          <Route
-            path="/login"
-            element={
-              <LoginPage
-                user={user}
-                lang={lang}
-                onLoggedIn={(u) => {
-                  setUser(u);
-                  navigate('/', { replace: true });
-                }}
-              />
-            }
-          />
-
-          {/* список */}
+          {/* Список */}
           <Route path="/inventories" element={<AllInventories />} />
 
-          {/* страница инвентаризации */}
+          {/* Страница инвентаризации */}
           <Route path="/inventories/:id" element={<InventoryDetails user={user} lang={lang} />} />
 
-          {/* отдельная страница редактирования */}
+          {/* Отдельная страница редактирования */}
           <Route
             path="/inventories/:id/edit"
             element={
@@ -148,6 +132,7 @@ export default function App() {
             }
           />
 
+          {/* Профиль */}
           <Route
             path="/profile"
             element={
@@ -157,7 +142,22 @@ export default function App() {
             }
           />
 
-          {/* страница администратора */}
+          {/* ➕ Страница логина (новая) */}
+          <Route
+            path="/login"
+            element={
+              <LoginPage
+                lang={lang}
+                onLoggedIn={(u) => {
+                  setUser(u);
+                  // после логина уводим на главную
+                  navigate('/', { replace: true });
+                }}
+              />
+            }
+          />
+
+          {/* Страница администратора */}
           <Route
             path="/admin"
             element={
@@ -167,7 +167,7 @@ export default function App() {
             }
           />
 
-          {/* фолбэк */}
+          {/* Фолбэк */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

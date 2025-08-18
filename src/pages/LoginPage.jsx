@@ -1,173 +1,150 @@
 // src/pages/LoginPage.jsx
 import React, { useMemo, useState } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { authService } from '../services/authService';
-import { getToken } from '../api/token';
 
-const DICT = {
-  ru: {
-    title: 'Вход в аккаунт',
-    subtitle: 'Выберите способ входа: OAuth или по email/паролю (если доступно на бэкенде).',
-    oauthTitle: 'OAuth вход',
-    emailTitle: 'Вход по email/паролю',
-    email: 'Email',
-    password: 'Пароль',
-    signIn: 'Войти',
-    or: 'или',
-    alreadyAuthed: 'Вы уже авторизованы.',
-    backHome: 'На главную',
-    providerGoogle: 'Войти через Google',
-    providerGithub: 'Войти через GitHub',
-    providerGeneric: 'Войти через OAuth',
-    errorLogin: 'Не удалось войти',
-  },
-  en: {
-    title: 'Sign in',
-    subtitle: 'Choose a sign-in method: OAuth or email/password (if backend supports it).',
-    oauthTitle: 'OAuth login',
-    emailTitle: 'Email/Password login',
-    email: 'Email',
-    password: 'Password',
-    signIn: 'Sign in',
-    or: 'or',
-    alreadyAuthed: 'You are already signed in.',
-    backHome: 'Back to Home',
-    providerGoogle: 'Sign in with Google',
-    providerGithub: 'Sign in with GitHub',
-    providerGeneric: 'Sign in with OAuth',
-    errorLogin: 'Failed to sign in',
-  },
-};
+export default function LoginPage({ lang: langProp = 'ru', onLoggedIn }) {
+  const lang = (langProp || localStorage.getItem('lang') || 'ru')
+    .toLowerCase()
+    .startsWith('en')
+    ? 'en'
+    : 'ru';
 
-export default function LoginPage({ user, lang: langProp, onLoggedIn }) {
-  const navigate = useNavigate();
-  const lang = (langProp || localStorage.getItem('lang') || 'ru').toLowerCase().startsWith('en') ? 'en' : 'ru';
-  const L = DICT[lang];
-
-  // Если уже авторизованы — уводим со страницы логина
-  const alreadyAuthed = !!user || !!getToken();
-  if (alreadyAuthed) {
-    return <Navigate to="/" replace />;
-  }
-
-  // Разрешаем конфигурировать список провайдеров через ENV,
-  // напр. VITE_OAUTH_PROVIDERS="google,github"
-  const providers = useMemo(() => {
-    const envVal = (import.meta.env.VITE_OAUTH_PROVIDERS || '').trim();
-    if (!envVal) return ['google', 'github']; // дефолт
-    return envVal.split(',').map((s) => s.trim()).filter(Boolean);
-  }, []);
+  const L = useMemo(
+    () =>
+      ({
+        ru: {
+          title: 'Вход',
+          email: 'Email',
+          password: 'Пароль',
+          signIn: 'Войти',
+          or: 'или',
+          withGoogle: 'Войти через Google',
+          withGithub: 'Войти через GitHub',
+          backHome: '← На главную',
+          errors: {
+            required: 'Введите email и пароль',
+            failed: 'Не удалось войти',
+          },
+        },
+        en: {
+          title: 'Sign in',
+          email: 'Email',
+          password: 'Password',
+          signIn: 'Sign in',
+          or: 'or',
+          withGoogle: 'Continue with Google',
+          withGithub: 'Continue with GitHub',
+          backHome: '← Back to home',
+          errors: {
+            required: 'Enter email and password',
+            failed: 'Sign-in failed',
+          },
+        },
+      }[lang]),
+    [lang]
+  );
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
 
-  function handleOAuth(provider) {
-    const url = authService.buildOAuthUrl(provider);
-    window.location.href = url; // редирект на бэкенд
-  }
-
-  async function handlePasswordLogin(e) {
+  async function handleSubmit(e) {
     e?.preventDefault?.();
     setError('');
-    if (!email.trim() || !password) return;
+    if (!email.trim() || !password) {
+      setError(L.errors.required);
+      return;
+    }
+    setPending(true);
     try {
-      setPending(true);
       const me = await authService.loginPassword(email.trim(), password);
-      if (me?.authenticated && me.user) {
-        onLoggedIn?.(me.user);
-        navigate('/', { replace: true });
-      } else {
-        setError(L.errorLogin);
+      // ожидаем объект вида { authenticated, user }
+      if (me?.authenticated && typeof onLoggedIn === 'function') {
+        onLoggedIn(me.user || null);
       }
     } catch (err) {
-      // Если /auth/login отсутствует на бэке — будет 404
-      const msg = err?.response?.data?.message || err?.message || L.errorLogin;
-      setError(msg);
+      setError(err?.message || L.errors.failed);
     } finally {
       setPending(false);
     }
   }
 
+  function goOAuth(provider) {
+    try {
+      const url = authService.buildOAuthUrl(provider);
+      window.location.href = url;
+    } catch {
+      // noop
+    }
+  }
+
   return (
-    <div className="container mx-auto max-w-md px-4 py-10">
-      <div className="rounded-2xl border border-gray-200 p-6 dark:border-gray-800 dark:bg-gray-950/40">
-        <h1 className="text-2xl font-semibold">{L.title}</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{L.subtitle}</p>
+    <div className="mx-auto max-w-md px-4 py-10">
+      <div className="mb-6">
+        <Link to="/" className="text-sm text-blue-600 hover:underline">
+          {L.backHome}
+        </Link>
+      </div>
 
-        {/* OAuth */}
-        <div className="mt-6">
-          <div className="text-sm font-medium opacity-80">{L.oauthTitle}</div>
-          <div className="mt-3 grid gap-2">
-            {providers.map((p) => {
-              let label = L.providerGeneric;
-              if (p === 'google') label = L.providerGoogle;
-              if (p === 'github') label = L.providerGithub;
-              return (
-                <button
-                  key={p}
-                  onClick={() => handleOAuth(p)}
-                  className="w-full rounded-xl border px-4 py-2 text-sm hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 dark:text-gray-100"
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
+        <div className="mb-4 text-xl font-semibold">{L.title}</div>
 
-        {/* разделитель */}
-        <div className="my-6 flex items-center">
-          <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
-          <div className="mx-3 text-xs uppercase opacity-50">{L.or}</div>
-          <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
-        </div>
-
-        {/* Email/Password */}
-        <div>
-          <div className="text-sm font-medium opacity-80">{L.emailTitle}</div>
-          <form className="mt-3 grid gap-3" onSubmit={handlePasswordLogin}>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="mb-1 block text-sm opacity-80">{L.email}</label>
             <input
               type="email"
-              placeholder={L.email}
+              className="w-full rounded-xl border px-3 py-2 text-sm dark:border-gray-800 dark:bg-transparent"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-xl border px-3 py-2 text-sm dark:border-gray-700 dark:bg-transparent"
-              autoComplete="username"
+              autoComplete="email"
             />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm opacity-80">{L.password}</label>
             <input
               type="password"
-              placeholder={L.password}
+              className="w-full rounded-xl border px-3 py-2 text-sm dark:border-gray-800 dark:bg-transparent"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border px-3 py-2 text-sm dark:border-gray-700 dark:bg-transparent"
               autoComplete="current-password"
             />
-
-            <button
-              type="submit"
-              disabled={pending || !email.trim() || !password}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {L.signIn}
-            </button>
-          </form>
-        </div>
-
-        {error && (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
-            {error}
           </div>
-        )}
 
-        <div className="mt-6 text-center">
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
+              {error}
+            </div>
+          )}
+
           <button
-            onClick={() => navigate('/')}
-            className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+            type="submit"
+            disabled={pending}
+            className="w-full rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {L.backHome}
+            {pending ? '…' : L.signIn}
+          </button>
+        </form>
+
+        <div className="my-4 text-center text-xs opacity-60">{L.or}</div>
+
+        <div className="grid gap-2">
+          <button
+            onClick={() => goOAuth('google')}
+            className="w-full rounded-xl border px-4 py-2 text-sm hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900"
+            type="button"
+          >
+            {L.withGoogle}
+          </button>
+          <button
+            onClick={() => goOAuth('github')}
+            className="w-full rounded-xl border px-4 py-2 text-sm hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900"
+            type="button"
+          >
+            {L.withGithub}
           </button>
         </div>
       </div>
