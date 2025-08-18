@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+// src/components/Login.jsx
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import http from '../api/http';
-import { setToken } from '../api/token';
+import { authService } from '../services/authService';
 
 export default function Login({ onLoggedIn, lang = 'ru' }) {
   const [email, setEmail]       = useState('');
@@ -26,7 +26,7 @@ export default function Login({ onLoggedIn, lang = 'ru' }) {
       serverRespInvalid: 'Неверный ответ сервера',
       loginErrorFallback: 'Ошибка входа',
       show: 'Показать',
-      hide: 'Скрыть'
+      hide: 'Скрыть',
     },
     en: {
       title: 'Sign in',
@@ -42,7 +42,7 @@ export default function Login({ onLoggedIn, lang = 'ru' }) {
       serverRespInvalid: 'Invalid server response',
       loginErrorFallback: 'Sign-in error',
       show: 'Show',
-      hide: 'Hide'
+      hide: 'Hide',
     }
   }), []);
   const L = t[lang] || t.ru;
@@ -52,24 +52,30 @@ export default function Login({ onLoggedIn, lang = 'ru' }) {
   async function submit(e) {
     e.preventDefault();
     if (!canSubmit) return;
+
     setError('');
     setPending(true);
     try {
-      const { data } = await http.post('/auth/login', { email, password });
-      if (data?.accessToken && data?.user) {
-        setToken(data.accessToken);
-        onLoggedIn?.(data.user);
+      const res = await authService.loginPassword(email, password);
+      if (res?.authenticated && res?.user) {
+        onLoggedIn?.(res.user);
         setEmail(''); setPassword('');
-        navigate('/', { replace: true }); // сразу на Home
+        navigate('/', { replace: true });
       } else {
         setError(L.serverRespInvalid);
       }
     } catch (err) {
-      setError(err?.response?.data?.error || L.loginErrorFallback);
+      const msg = err?.message || L.loginErrorFallback;
+      setError(msg);
     } finally {
       setPending(false);
     }
   }
+
+  const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/,'');
+  const oauthRedirect = `${window.location.origin}/#/oauth`;
+  const googleHref = `${base}/auth/google?redirect=${encodeURIComponent(oauthRedirect)}`;
+  const githubHref = `${base}/auth/github?redirect=${encodeURIComponent(oauthRedirect)}`;
 
   return (
     <section
@@ -142,9 +148,8 @@ export default function Login({ onLoggedIn, lang = 'ru' }) {
       <div className="mt-4 space-y-2">
         <div className="text-center text-xs text-gray-500">{L.or}</div>
 
-        {/* Google OAuth (через Vercel proxy /api) */}
         <a
-          href="/api/auth/google"
+          href={googleHref}
           className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition
                      bg-white border border-gray-300 hover:bg-gray-50 w-full
                      dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700"
@@ -152,9 +157,8 @@ export default function Login({ onLoggedIn, lang = 'ru' }) {
           {L.google}
         </a>
 
-        {/* GitHub OAuth */}
         <a
-          href="/api/auth/github"
+          href={githubHref}
           className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition
                      bg-white border border-gray-300 hover:bg-gray-50 w-full
                      dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700"

@@ -18,9 +18,7 @@ export default function Navbar({ user, setUser, theme, setTheme, lang = 'ru', se
   const L = t[lang] || t.ru;
 
   const handleLogout = async () => {
-    try {
-      await http.post('/auth/logout');
-    } catch {}
+    try { await http.post('/auth/logout'); } catch {}
     clearToken();
     setUser(null);
   };
