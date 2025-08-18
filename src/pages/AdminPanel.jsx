@@ -2,7 +2,71 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { adminService } from '../services/adminService';
 
-export default function AdminPanel({ user }) {
+export default function AdminPanel({ user, lang: langProp }) {
+  // Язык: из пропсов -> из localStorage -> ru
+  const lang =
+    (langProp || localStorage.getItem('lang') || 'ru')
+      .toLowerCase()
+      .startsWith('en')
+      ? 'en'
+      : 'ru';
+
+  const DICT = {
+    ru: {
+      title: 'Админка: пользователи',
+      total: 'Всего',
+      searchPlaceholder: 'Поиск по имени или email…',
+      loading: 'Загрузка…',
+      notFound: 'Ничего не найдено',
+      onlyAdmins: 'Доступ только для администраторов.',
+      user: 'Пользователь',
+      email: 'Email',
+      status: 'Статус',
+      role: 'Роль',
+      actions: 'Действия',
+      active: 'активен',
+      blocked: 'заблокирован',
+      admin: 'admin',
+      userRole: 'user',
+      unblock: 'Разблокировать',
+      block: 'Заблокировать',
+      makeAdmin: 'Сделать админом',
+      revokeAdmin: 'Снять админа',
+      prev: '← Назад',
+      next: 'Вперёд →',
+      pageOf: (p, pages) => `Стр. ${p} из ${pages}`,
+      cantBlockSelf: 'Нельзя блокировать себя',
+      cantChangeSelfRole: 'Нельзя менять себе роль',
+    },
+    en: {
+      title: 'Admin: users',
+      total: 'Total',
+      searchPlaceholder: 'Search by name or email…',
+      loading: 'Loading…',
+      notFound: 'Nothing found',
+      onlyAdmins: 'Admins only.',
+      user: 'User',
+      email: 'Email',
+      status: 'Status',
+      role: 'Role',
+      actions: 'Actions',
+      active: 'active',
+      blocked: 'blocked',
+      admin: 'admin',
+      userRole: 'user',
+      unblock: 'Unblock',
+      block: 'Block',
+      makeAdmin: 'Make admin',
+      revokeAdmin: 'Revoke admin',
+      prev: '← Prev',
+      next: 'Next →',
+      pageOf: (p, pages) => `Page ${p} of ${pages}`,
+      cantBlockSelf: 'You cannot block yourself',
+      cantChangeSelfRole: 'You cannot change your own role',
+    },
+  };
+  const L = DICT[lang];
+
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState([]);
@@ -23,130 +87,188 @@ export default function AdminPanel({ user }) {
         setItems(res.items || []);
         setTotal(res.total || 0);
       } catch {
-        if (!dead) { setItems([]); setTotal(0); }
+        if (!dead) {
+          setItems([]);
+          setTotal(0);
+        }
       } finally {
         if (!dead) setLoading(false);
       }
     })();
-    return () => { dead = true; };
+    return () => {
+      dead = true;
+    };
   }, [q, page]);
 
   async function toggleBlock(u) {
     setSavingId(u.id);
     try {
       const next = await adminService.setBlocked(u.id, !u.blocked);
-      setItems(prev => prev.map(x => x.id === u.id ? { ...x, ...next } : x));
+      setItems(prev => prev.map(x => (x.id === u.id ? { ...x, ...next } : x)));
     } finally {
       setSavingId(null);
     }
   }
+
   async function toggleAdmin(u) {
     setSavingId(u.id);
     try {
       const next = await adminService.setAdmin(u.id, !(u.isAdmin || u.role === 'admin'));
-      setItems(prev => prev.map(x => x.id === u.id ? { ...x, ...next } : x));
+      setItems(prev => prev.map(x => (x.id === u.id ? { ...x, ...next } : x)));
     } finally {
       setSavingId(null);
     }
   }
 
   if (!canSee) {
-    return <div className="rounded-xl border p-4 text-sm text-red-600">Доступ только для администраторов.</div>;
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
+        {L.onlyAdmins}
+      </div>
+    );
   }
 
   const pages = Math.max(1, Math.ceil(total / limit));
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-6">
+      {/* Заголовок */}
       <div className="mb-4 flex items-center justify-between">
-        <div className="text-xl font-semibold">Админка: пользователи</div>
-        <div className="text-sm opacity-70">Всего: {total}</div>
+        <div className="text-xl font-semibold">{L.title}</div>
+        <div className="text-sm opacity-70">
+          {L.total}: {total}
+        </div>
       </div>
 
+      {/* Поиск */}
       <div className="mb-4 flex items-center gap-2">
         <input
           value={q}
-          onChange={(e) => { setQ(e.target.value); setPage(1); }}
-          placeholder="Поиск по имени или email…"
-          className="w-full rounded-md border px-3 py-2 text-sm"
+          onChange={(e) => {
+            setQ(e.target.value);
+            setPage(1);
+          }}
+          placeholder={L.searchPlaceholder}
+          className="w-full rounded-md border px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-400
+                     dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500 dark:border-gray-800"
         />
       </div>
 
+      {/* Таблица */}
       {loading ? (
-        <div className="opacity-70 text-sm">Загрузка…</div>
+        <div className="opacity-70 text-sm">{L.loading}</div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border">
+        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-2 text-left">Пользователь</th>
-                <th className="px-3 py-2 text-left">Email</th>
-                <th className="px-3 py-2">Статус</th>
-                <th className="px-3 py-2">Роль</th>
-                <th className="px-3 py-2">Действия</th>
+            <thead className="bg-gray-50 dark:bg-gray-900/60">
+              <tr className="text-gray-700 dark:text-gray-200">
+                <th className="px-3 py-2 text-left">{L.user}</th>
+                <th className="px-3 py-2 text-left">{L.email}</th>
+                <th className="px-3 py-2">{L.status}</th>
+                <th className="px-3 py-2">{L.role}</th>
+                <th className="px-3 py-2">{L.actions}</th>
               </tr>
             </thead>
-            <tbody>
-              {items.map(u => (
-                <tr key={u.id} className="border-t">
+            <tbody className="bg-white dark:bg-gray-950">
+              {items.map((u) => (
+                <tr key={u.id} className="border-t border-gray-200 dark:border-gray-800">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-3">
-                      <img src={u.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(u.email || u.id)}`} alt="a" className="h-8 w-8 rounded-full" />
-                      <div className="font-medium">{u.name || '—'}</div>
+                      <img
+                        src={
+                          u.avatar ||
+                          `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(
+                            u.email || u.id
+                          )}`
+                        }
+                        alt="avatar"
+                        className="h-8 w-8 rounded-full"
+                      />
+                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                        {u.name || '—'}
+                      </div>
                     </div>
                   </td>
-                  <td className="px-3 py-2">{u.email}</td>
+                  <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{u.email}</td>
                   <td className="px-3 py-2">
-                    {u.blocked ? <span className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">заблокирован</span> : <span className="rounded bg-green-100 px-2 py-1 text-xs text-green-700">активен</span>}
+                    {u.blocked ? (
+                      <span className="rounded bg-red-100 px-2 py-1 text-xs text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                        {L.blocked}
+                      </span>
+                    ) : (
+                      <span className="rounded bg-green-100 px-2 py-1 text-xs text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                        {L.active}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
-                    {(u.isAdmin || u.role === 'admin') ? <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-700">admin</span> : <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">user</span>}
+                    {u.isAdmin || u.role === 'admin' ? (
+                      <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                        {L.admin}
+                      </span>
+                    ) : (
+                      <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                        {L.userRole}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <button
-                        className="rounded-md border px-2 py-1 hover:bg-gray-50 disabled:opacity-50"
+                        className="rounded-md border px-2 py-1 hover:bg-gray-50 disabled:opacity-50
+                                   dark:border-gray-700 dark:hover:bg-gray-800 dark:text-gray-100"
                         onClick={() => toggleBlock(u)}
                         disabled={savingId === u.id || String(u.id) === String(user?._id)}
-                        title={String(u.id) === String(user?._id) ? 'Нельзя блокировать себя' : ''}
+                        title={String(u.id) === String(user?._id) ? L.cantBlockSelf : ''}
                       >
-                        {u.blocked ? 'Разблокировать' : 'Заблокировать'}
+                        {u.blocked ? L.unblock : L.block}
                       </button>
                       <button
-                        className="rounded-md border px-2 py-1 hover:bg-gray-50 disabled:opacity-50"
+                        className="rounded-md border px-2 py-1 hover:bg-gray-50 disabled:opacity-50
+                                   dark:border-gray-700 dark:hover:bg-gray-800 dark:text-gray-100"
                         onClick={() => toggleAdmin(u)}
                         disabled={savingId === u.id || String(u.id) === String(user?._id)}
-                        title={String(u.id) === String(user?._id) ? 'Нельзя менять себе роль' : ''}
+                        title={String(u.id) === String(user?._id) ? L.cantChangeSelfRole : ''}
                       >
-                        {(u.isAdmin || u.role === 'admin') ? 'Снять админа' : 'Сделать админом'}
+                        {u.isAdmin || u.role === 'admin' ? L.revokeAdmin : L.makeAdmin}
                       </button>
                     </div>
                   </td>
                 </tr>
               ))}
               {!items.length && (
-                <tr><td className="px-3 py-6 text-center opacity-60" colSpan={5}>Ничего не найдено</td></tr>
+                <tr>
+                  <td
+                    className="px-3 py-6 text-center opacity-70 text-gray-700 dark:text-gray-300"
+                    colSpan={5}
+                  >
+                    {L.notFound}
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
       )}
 
+      {/* Пагинация */}
       <div className="mt-4 flex items-center justify-center gap-2">
         <button
           disabled={page <= 1}
-          onClick={() => setPage(p => Math.max(1, p - 1))}
-          className="rounded-md border px-3 py-1 text-sm disabled:opacity-50"
+          onClick={() => setPage((p) => Math.max(1, p - 1))}
+          className="rounded-md border px-3 py-1 text-sm disabled:opacity-50 hover:bg-gray-50
+                     dark:border-gray-700 dark:hover:bg-gray-800 dark:text-gray-100"
         >
-          ← Назад
+          {L.prev}
         </button>
-        <div className="text-sm">Стр. {page} из {pages}</div>
+        <div className="text-sm text-gray-700 dark:text-gray-300">{L.pageOf(page, pages)}</div>
         <button
           disabled={page >= pages}
-          onClick={() => setPage(p => Math.min(pages, p + 1))}
-          className="rounded-md border px-3 py-1 text-sm disabled:opacity-50"
+          onClick={() => setPage((p) => Math.min(pages, p + 1))}
+          className="rounded-md border px-3 py-1 text-sm disabled:opacity-50 hover:bg-gray-50
+                     dark:border-gray-700 dark:hover:bg-gray-800 dark:text-gray-100"
         >
-          Вперёд →
+          {L.next}
         </button>
       </div>
     </div>
