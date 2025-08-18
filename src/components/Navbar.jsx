@@ -35,7 +35,7 @@ export default function Navbar({ user, setUser, theme, setTheme, lang = 'ru', se
             <UserMenu user={user} onLogout={handleLogout} lang={lang} />
           ) : (
             <a
-              href="#login"
+              href="/login"
               onClick={(e) => {
                 e.preventDefault();
                 window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });

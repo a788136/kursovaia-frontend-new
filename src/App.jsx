@@ -11,9 +11,10 @@ import InventoryDetails from './pages/InventoryDetails';
 import InventoryEdit from './pages/InventoryEdit';
 import RequireAdmin from './components/routing/RequireAdmin';
 import AdminPanel from './pages/AdminPanel';
+import LoginPage from './pages/LoginPage';
 
 function ProtectedRoute({ isAuthed, children }) {
-  if (!isAuthed) return <Navigate to="/" replace />;
+  if (!isAuthed) return <Navigate to="/login" replace />;
   return children;
 }
 
@@ -24,7 +25,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Считываем токен из hash после OAuth: #/oauth?token=...
+  // Забираем токен из hash после OAuth: #/oauth?token=...
   useEffect(() => {
     const hash = window.location.hash || '';
     if (hash.startsWith('#/oauth')) {
@@ -32,7 +33,7 @@ export default function App() {
       const token = q.get('token');
       if (token) {
         setToken(token);
-        // маленький фикс: используем window.history
+        // аккуратный replace state (без history.push)
         window.history.replaceState(null, '', '/');
         navigate('/', { replace: true });
       }
@@ -42,8 +43,7 @@ export default function App() {
   // Тема
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === 'dark') root.classList.add('dark');
-    else root.classList.remove('dark');
+    if (theme === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
     localStorage.setItem('theme', theme);
   }, [theme]);
 
@@ -117,13 +117,28 @@ export default function App() {
             }
           />
 
-          {/* Список */}
+          {/* новая страница логина */}
+          <Route
+            path="/login"
+            element={
+              <LoginPage
+                user={user}
+                lang={lang}
+                onLoggedIn={(u) => {
+                  setUser(u);
+                  navigate('/', { replace: true });
+                }}
+              />
+            }
+          />
+
+          {/* список */}
           <Route path="/inventories" element={<AllInventories />} />
 
-          {/* Страница инвентаризации */}
+          {/* страница инвентаризации */}
           <Route path="/inventories/:id" element={<InventoryDetails user={user} lang={lang} />} />
 
-          {/* Отдельная страница редактирования */}
+          {/* отдельная страница редактирования */}
           <Route
             path="/inventories/:id/edit"
             element={
@@ -142,7 +157,7 @@ export default function App() {
             }
           />
 
-          {/* Страница администратора */}
+          {/* страница администратора */}
           <Route
             path="/admin"
             element={
@@ -152,7 +167,7 @@ export default function App() {
             }
           />
 
-          {/* Фолбэк */}
+          {/* фолбэк */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
