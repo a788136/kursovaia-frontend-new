@@ -1,23 +1,15 @@
-// src/api/http.js
+// front/src/api/http.js
 import axios from 'axios';
 import { getToken } from './token';
 
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
-
 const http = axios.create({
-  baseURL: API_BASE || undefined,
-  withCredentials: true,
+  baseURL: '/api',
+  withCredentials: true, // обязательно, чтобы сессия доходила
 });
 
 http.interceptors.request.use((config) => {
   const t = getToken?.();
-  // Не подставляем сомнительные/пустые маркеры
-  if (t && t !== 'cookie-session') {
-    config.headers = config.headers || {};
-    config.headers.Authorization = `Bearer ${t}`;
-  } else if (config.headers?.Authorization) {
-    delete config.headers.Authorization;
-  }
+  if (t) config.headers.Authorization = `Bearer ${t}`;
   return config;
 });
 

@@ -1,13 +1,11 @@
 // src/services/inventoryService.js
+// Универсальный fetch-сервис для /inventories и смежных публичных эндпойнтов.
+
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
 function url(path) {
   if (!API_BASE) return path;
   return `${API_BASE}${path}`;
-}
-
-function authHeaders(token) {
-  return token && token !== 'cookie-session' ? { Authorization: `Bearer ${token}` } : {};
 }
 
 async function handle(res) {
@@ -25,89 +23,92 @@ async function handle(res) {
 }
 
 export const inventoryService = {
+  /**
+   * Список инвентаризаций (публично).
+   * params: { owner, q, tag, category, limit, page }
+   */
   async getAll(params = {}) {
     const qs = new URLSearchParams(params).toString();
     const res = await fetch(url(`/inventories${qs ? `?${qs}` : ''}`), {
       method: 'GET',
       headers: { Accept: 'application/json' },
-      credentials: 'include',
     });
     return handle(res);
   },
 
+  /** Создать (требует JWT — эта функция оставлена как в проекте) */
   async create(payload, token) {
     const res = await fetch(url(`/inventories`), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        ...authHeaders(token),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(payload),
-      credentials: 'include',
     });
     return handle(res);
   },
 
+  /** Обновить (JWT) */
   async update(id, payload, token) {
     const res = await fetch(url(`/inventories/${encodeURIComponent(id)}`), {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        ...authHeaders(token),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(payload),
-      credentials: 'include',
     });
     return handle(res);
   },
 
+  /** Удалить (JWT) */
   async remove(id, token) {
     const res = await fetch(url(`/inventories/${encodeURIComponent(id)}`), {
       method: 'DELETE',
       headers: {
         Accept: 'application/json',
-        ...authHeaders(token),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      credentials: 'include',
     });
     return handle(res);
   },
 
+  /** Детальная (публично) */
   async getById(id) {
     const res = await fetch(url(`/inventories/${encodeURIComponent(id)}`), {
       method: 'GET',
       headers: { Accept: 'application/json' },
-      credentials: 'include',
     });
     return handle(res);
   },
 
+  /** Последние (публично) */
   async getLatest(limit = 12) {
     const qs = new URLSearchParams({ limit: String(limit) }).toString();
     const res = await fetch(url(`/inventories/latest?${qs}`), {
       method: 'GET',
       headers: { Accept: 'application/json' },
-      credentials: 'include',
     });
     return handle(res);
   },
 
+  /** Топ по количеству items (публично) */
   async getTop() {
     const res = await fetch(url(`/inventories/top`), {
       method: 'GET',
       headers: { Accept: 'application/json' },
-      credentials: 'include',
     });
     return handle(res);
   },
 
+  /** Уникальные теги (публично) */
   async getTags() {
     const res = await fetch(url(`/tags`), {
       method: 'GET',
       headers: { Accept: 'application/json' },
-      credentials: 'include',
     });
     return handle(res);
   },
