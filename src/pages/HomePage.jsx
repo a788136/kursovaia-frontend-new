@@ -1,14 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { inventoryService } from '../services/inventoryService';
+import Modal from '../components/Modal';
+import InventoryForm from '../components/InventoryForm';
+import { getToken as getAccessToken } from '../api/token';
 
 /**
  * Главная страница (публичная):
- * 1) Последние инвентаризации — списком
+ * 1) Последние инвентаризации — списком (div-таблица)
  * 2) Топ инвентаризаций — списком
  * 3) Теги (чипсы) + по выбранному тегу — списком
- *
- * Ничего старого не ломаем. Только чтение публичных API.
+ * 4) Если пользователь авторизован — кнопка "Создать" с модальным окном
  */
 
 const TEXT = {
@@ -25,6 +27,11 @@ const TEXT = {
     owner: 'Автор',
     description: 'Описание',
     updated: 'Обновлено',
+    // создание
+    create: 'Создать',
+    creating: 'Создаём…',
+    createTitle: 'Новая инвентаризация',
+    createError: 'Не удалось создать',
   },
   en: {
     latest: 'Latest inventories',
@@ -39,6 +46,11 @@ const TEXT = {
     owner: 'Owner',
     description: 'Description',
     updated: 'Updated',
+    // create
+    create: 'Create',
+    creating: 'Creating…',
+    createTitle: 'New inventory',
+    createError: 'Failed to create',
   },
 };
 
@@ -78,12 +90,15 @@ function formatDate(row) {
 }
 
 /** «Таблица» на div-ах */
-function ListSection({ title, items, emptyText, L, navigate }) {
+function ListSection({ title, items, emptyText, L, navigate, toolbarRight = null }) {
   const GRID_COLS = '4rem 2fr 1.2fr 3fr 1.1fr';
 
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-semibold">{title}</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        {toolbarRight}
+      </div>
 
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
         {/* header */}
@@ -161,7 +176,7 @@ function ListSection({ title, items, emptyText, L, navigate }) {
   );
 }
 
-export default function HomePage({ lang: langProp }) {
+export default function HomePage({ user, lang: langProp }) {
   const { L } = useI18n(langProp);
   const navigate = useNavigate();
 
@@ -176,6 +191,33 @@ export default function HomePage({ lang: langProp }) {
   const [selectedTag, setSelectedTag] = useState('');
   const [tagItems, setTagItems] = useState([]);
   const [loadingTagItems, setLoadingTagItems] = useState(false);
+
+  // ----- создание (только для авторизованных) -----
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+
+  async function handleCreate(payload) {
+    setCreating(true);
+    setCreateError('');
+    try {
+      const token = getAccessToken();
+      const created = await inventoryService.create(payload, token);
+      const norm = normalize(created);
+      // добавим в начало «Последних»
+      setLatest((prev) => [norm, ...prev]);
+      setShowCreate(false);
+    } catch (e) {
+      const msg =
+        e?.response?.data?.error ||
+        e?.response?.data?.message ||
+        e?.message ||
+        L.createError;
+      setCreateError(msg);
+    } finally {
+      setCreating(false);
+    }
+  }
 
   // load latest
   useEffect(() => {
@@ -241,13 +283,24 @@ export default function HomePage({ lang: langProp }) {
 
   return (
     <div className="space-y-10">
-      {/* Latest */}
+      {/* Latest + Create button (для авторизованных) */}
       <ListSection
         title={L.latest}
         items={latest}
         emptyText={L.empty}
         L={L}
         navigate={navigate}
+        toolbarRight={
+          user ? (
+            <button
+              onClick={() => { setShowCreate(true); setCreateError(''); }}
+              className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50"
+              disabled={creating}
+            >
+              {creating ? L.creating : L.create}
+            </button>
+          ) : null
+        }
       />
       {loadingLatest && <div className="text-sm text-gray-500" />}
 
@@ -318,6 +371,22 @@ export default function HomePage({ lang: langProp }) {
           </div>
         )}
       </section>
+
+      {/* Модалка создания (только при user) */}
+      {user && (
+        <Modal open={showCreate} onClose={() => setShowCreate(false)} title={L.createTitle}>
+          {createError && (
+            <div className="mb-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {createError}
+            </div>
+          )}
+          <InventoryForm
+            submitText={creating ? L.creating : L.create}
+            onSubmit={handleCreate}
+            onCancel={() => setShowCreate(false)}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
