@@ -105,14 +105,14 @@ export default function AllInventories(props) {
       />
 
       {/* grid */}
-      <InventoryGrid
+      {/* <InventoryGrid
         rows={filtered}
         onRowClick={(row) => navigate(`/inventories/${row._id}`)}
         sortKey={sortKey}
         sortDir={sortDir}
         toggleSort={toggleSort}
         t={t}
-      />
+      /> */}
 
       {/* modal: create */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t('create')}>
