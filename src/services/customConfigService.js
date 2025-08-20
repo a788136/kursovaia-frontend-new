@@ -1,43 +1,62 @@
-// Небольшой API‑хелпер для сохранения полей и формата кастомного ID.
-// Подстрой под свои пути/авторизацию, если отличаются.
-export async function saveFields({ baseUrl = '', inventoryId, fields, token }) {
+// src/services/customConfigService.js
+// Хелперы для сохранения полей и формата кастомного ID.
+// Исправлено: по умолчанию подставляем Bearer JWT из localStorage.
+
+import { getToken } from '../api/token';
+
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+
+function base(url) {
+  if (!API_BASE) return url;
+  return `${API_BASE}${url}`;
+}
+
+function authHeaders() {
+  const t = getToken?.();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
+export async function saveFields({ inventoryId, fields }) {
   if (!inventoryId) throw new Error('inventoryId is required');
-  const res = await fetch(`${baseUrl}/inventories/${encodeURIComponent(inventoryId)}/fields`, {
+  const res = await fetch(base(`/inventories/${encodeURIComponent(inventoryId)}/fields`), {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      Accept: 'application/json',
+      ...authHeaders(),
     },
     body: JSON.stringify({ fields }),
-    credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to save fields: ${res.status}`);
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || `Failed to save fields: ${res.status}`);
   return res.json();
 }
 
-export async function saveCustomIdFormat({ baseUrl = '', inventoryId, customIdFormat, token }) {
+export async function saveCustomIdFormat({ inventoryId, format }) {
   if (!inventoryId) throw new Error('inventoryId is required');
-  const res = await fetch(`${baseUrl}/inventories/${encodeURIComponent(inventoryId)}/custom-id-format`, {
+  const res = await fetch(base(`/inventories/${encodeURIComponent(inventoryId)}/custom-id`), {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      Accept: 'application/json',
+      ...authHeaders(),
     },
-    body: JSON.stringify({ customIdFormat }),
-    credentials: 'include',
+    body: JSON.stringify({ format }),
   });
-  if (!res.ok) throw new Error(`Failed to save customIdFormat: ${res.status}`);
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || `Failed to save format: ${res.status}`);
   return res.json();
 }
 
-// Если на бэке есть предпросмотр — используем:
-export async function previewCustomId({ baseUrl = '', inventoryId, format, sampleFields }) {
-  const res = await fetch(`${baseUrl}/inventories/${encodeURIComponent(inventoryId)}/custom-id/preview`, {
+export async function previewCustomId({ inventoryId, format, sampleFields }) {
+  const res = await fetch(base(`/inventories/${encodeURIComponent(inventoryId)}/custom-id/preview`), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      // превью можно делать и без авторизации, но пусть будет единообразно:
+      ...authHeaders(),
+    },
     body: JSON.stringify({ format, sampleFields }),
-    credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to preview: ${res.status}`);
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || `Failed to preview: ${res.status}`);
   return res.json(); // { preview: "..." }
 }

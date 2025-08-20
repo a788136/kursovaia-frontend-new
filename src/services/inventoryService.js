@@ -1,5 +1,8 @@
 // src/services/inventoryService.js
 // Универсальный fetch-сервис для /inventories и смежных публичных эндпойнтов.
+// Исправлено: защищённые методы автоматически подставляют Bearer JWT из localStorage.
+
+import { getToken } from '../api/token';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
@@ -8,70 +11,55 @@ function url(path) {
   return `${API_BASE}${path}`;
 }
 
+function authHeaders() {
+  const t = getToken?.();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 async function handle(res) {
   if (res.status === 204 || res.status === 304) return null;
   const text = await res.text();
   let data;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (!res.ok) {
-    const err = new Error(data?.message || data?.error || `HTTP ${res.status}`);
-    err.status = res.status;
-    err.data = data;
-    throw err;
+    const reason = (data && (data.error || data.message)) || `HTTP ${res.status}`;
+    throw new Error(reason);
   }
   return data;
 }
 
 export const inventoryService = {
-  /**
-   * Список инвентаризаций (публично).
-   * params: { owner, q, tag, category, limit, page }
-   */
-  async getAll(params = {}) {
-    const qs = new URLSearchParams(params).toString();
-    const res = await fetch(url(`/inventories${qs ? `?${qs}` : ''}`), {
+  /** Список (публично) */
+  async getAll({ q = '', limit = 20, skip = 0 } = {}) {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (limit != null) params.set('limit', String(limit));
+    if (skip != null) params.set('skip', String(skip));
+    const res = await fetch(url(`/inventories?${params.toString()}`), {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });
     return handle(res);
   },
 
-  /** Создать (требует JWT — эта функция оставлена как в проекте) */
-  async create(payload, token) {
-    const res = await fetch(url(`/inventories`), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(payload),
+  /** Последние (публично) */
+  async getLatest(limit = 10) {
+    const params = new URLSearchParams();
+    if (limit != null) params.set('limit', String(limit));
+    const res = await fetch(url(`/inventories/latest?${params.toString()}`), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
     });
     return handle(res);
   },
 
-  /** Обновить (JWT) */
-  async update(id, payload, token) {
-    const res = await fetch(url(`/inventories/${encodeURIComponent(id)}`), {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(payload),
-    });
-    return handle(res);
-  },
-
-  /** Удалить (JWT) */
-  async remove(id, token) {
-    const res = await fetch(url(`/inventories/${encodeURIComponent(id)}`), {
-      method: 'DELETE',
-      headers: {
-        Accept: 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+  /** Популярные (публично) */
+  async getTop(limit = 5) {
+    const params = new URLSearchParams();
+    if (limit != null) params.set('limit', String(limit));
+    const res = await fetch(url(`/inventories/top?${params.toString()}`), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
     });
     return handle(res);
   },
@@ -85,21 +73,42 @@ export const inventoryService = {
     return handle(res);
   },
 
-  /** Последние (публично) */
-  async getLatest(limit = 12) {
-    const qs = new URLSearchParams({ limit: String(limit) }).toString();
-    const res = await fetch(url(`/inventories/latest?${qs}`), {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
+  /** Создать (JWT) */
+  async create(payload) {
+    const res = await fetch(url(`/inventories`), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...authHeaders(),
+      },
+      body: JSON.stringify(payload || {}),
     });
     return handle(res);
   },
 
-  /** Топ по количеству items (публично) */
-  async getTop() {
-    const res = await fetch(url(`/inventories/top`), {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
+  /** Обновить (JWT) */
+  async update(id, payload) {
+    const res = await fetch(url(`/inventories/${encodeURIComponent(id)}`), {
+      method: 'PUT', // роут на бэке ожидает PUT
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...authHeaders(),
+      },
+      body: JSON.stringify(payload || {}),
+    });
+    return handle(res);
+  },
+
+  /** Удалить (JWT) */
+  async remove(id) {
+    const res = await fetch(url(`/inventories/${encodeURIComponent(id)}`), {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/json',
+        ...authHeaders(),
+      },
     });
     return handle(res);
   },
