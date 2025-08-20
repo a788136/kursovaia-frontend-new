@@ -13,6 +13,8 @@ import RequireAdmin from './components/routing/RequireAdmin';
 import AdminPanel from './pages/AdminPanel';
 // ⬇️ ДОБАВЛЕНО: страница логина
 import LoginPage from './pages/LoginPage';
+// ⬇️ ДОБАВЛЕНО: страница поиска
+import SearchPage from './pages/SearchPage';
 
 function ProtectedRoute({ isAuthed, children }) {
   if (!isAuthed) return <Navigate to="/" replace />;
@@ -156,6 +158,9 @@ export default function App() {
               />
             }
           />
+
+          {/* ➕ Страница поиска (новая) */}
+          <Route path="/search" element={<SearchPage lang={lang} />} />
 
           {/* Страница администратора */}
           <Route
