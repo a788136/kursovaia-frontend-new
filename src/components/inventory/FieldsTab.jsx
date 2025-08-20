@@ -62,7 +62,7 @@ function FieldRow({ L, field, onChange, onRemove, onDragStart, onDragOver, onDro
           <label style={{ fontSize: 12, color: '#666' }}>{L.key}</label>
           <input
             value={field.key}
-            onChange={(e) => onChange({ ...field, key: e.target.value })}
+            onChange={(e) => onChange({ ...field, key: e.target.value }, { immediate: false })}
             placeholder={L.placeholderKey}
             style={{ width: '100%' }}
           />
@@ -71,7 +71,7 @@ function FieldRow({ L, field, onChange, onRemove, onDragStart, onDragOver, onDro
           <label style={{ fontSize: 12, color: '#666' }}>{L.label}</label>
           <input
             value={field.label || ''}
-            onChange={(e) => onChange({ ...field, label: e.target.value })}
+            onChange={(e) => onChange({ ...field, label: e.target.value }, { immediate: false })}
             placeholder={L.placeholderLabel}
             style={{ width: '100%' }}
           />
@@ -81,7 +81,7 @@ function FieldRow({ L, field, onChange, onRemove, onDragStart, onDragOver, onDro
           <input
             type="checkbox"
             checked={!!field.showInTable}
-            onChange={(e) => onChange({ ...field, showInTable: e.target.checked })}
+            onChange={(e) => onChange({ ...field, showInTable: e.target.checked }, { immediate: true })}
           />
         </div>
       </div>
@@ -90,7 +90,7 @@ function FieldRow({ L, field, onChange, onRemove, onDragStart, onDragOver, onDro
         <label style={{ fontSize: 12, color: '#666' }}>{L.helper}</label>
         <textarea
           value={field.hint || ''}
-          onChange={(e) => onChange({ ...field, hint: e.target.value })}
+          onChange={(e) => onChange({ ...field, hint: e.target.value }, { immediate: false })}
           placeholder={L.tooltip}
           rows={2}
           style={{ width: '100%' }}
@@ -113,10 +113,12 @@ export default function FieldsTab({ value, onChange, onSave, disabled }) {
   const [dragIndex, setDragIndex] = useState(null);
   const fields = value || [];
 
-  // --- AUTOSAVE state/refs (как в CustomIdTab) ---
+  // --- AUTOSAVE state/refs ---
   const [savingState, setSavingState] = useState('idle'); // 'idle' | 'saving' | 'saved'
   const saveTimer = useRef(null);
   const isComposingRef = useRef(false);
+  const fieldsRef = useRef(fields);
+  useEffect(() => { fieldsRef.current = fields; }, [fields]);
 
   // IME guard — не стартуем таймер во время набора составных символов
   useEffect(() => {
@@ -130,25 +132,33 @@ export default function FieldsTab({ value, onChange, onSave, disabled }) {
     };
   }, []);
 
-  // AUTOSAVE: откладываем onSave на 8 секунд после любого изменения набора полей
-  useEffect(() => {
-    if (!onSave || disabled) return; // если нет обработчика сохранения — ничего не делаем
+  // Планировщик сохранений:
+  // - immediate: для дискретных действий (add/remove/reorder/checkbox) — микро-дебаунс 300ms
+  // - debounced (immediate:false): для набора текста — дебаунс 1000ms
+  const doSave = async () => {
+    if (!onSave || disabled) return;
+    try {
+      setSavingState('saving');
+      const toSave = fieldsRef.current;
+      await onSave(toSave);
+      setSavingState('saved');
+      setTimeout(() => setSavingState('idle'), 1200);
+    } catch {
+      setSavingState('idle'); // ошибку показывает родитель
+    }
+  };
+
+  const scheduleSave = ({ immediate = false } = {}) => {
+    if (!onSave || disabled) return;
     clearTimeout(saveTimer.current);
-    if (isComposingRef.current) return;
-
-    saveTimer.current = setTimeout(async () => {
-      try {
-        setSavingState('saving');
-        await onSave(fields);
-        setSavingState('saved');
-        setTimeout(() => setSavingState('idle'), 1200);
-      } catch {
-        setSavingState('idle'); // тихо гасим — явные ошибки пусть показывает родитель
-      }
-    }, 8000);
-
-    return () => clearTimeout(saveTimer.current);
-  }, [fields, onSave, disabled]);
+    if (immediate) {
+      // маленький коалесцирующий промежуток
+      saveTimer.current = setTimeout(doSave, 300);
+    } else {
+      if (isComposingRef.current) return; // во время IME не ставим
+      saveTimer.current = setTimeout(doSave, 1000);
+    }
+  };
 
   // ---- подсчёты/валидация как было ----
   const counts = useMemo(
@@ -163,10 +173,18 @@ export default function FieldsTab({ value, onChange, onSave, disabled }) {
     if (!canAdd(type)) return;
     const key = `${type}_${uid()}`;
     onChange?.([...fields, { id: uid(), type, key, label: '', showInTable: false, hint: '' }]);
+    scheduleSave({ immediate: true });
   };
 
-  const removeAt = (i) => onChange?.(fields.filter((_, idx) => idx !== i));
-  const updateAt = (i, patch) => onChange?.(fields.map((f, idx) => (idx === i ? patch : f)));
+  const removeAt = (i) => {
+    onChange?.(fields.filter((_, idx) => idx !== i));
+    scheduleSave({ immediate: true });
+  };
+
+  const updateAt = (i, patch, opts = { immediate: false }) => {
+    onChange?.(fields.map((f, idx) => (idx === i ? patch : f)));
+    scheduleSave({ immediate: !!opts.immediate });
+  };
 
   const errors = useMemo(() => {
     const errs = [];
@@ -184,17 +202,9 @@ export default function FieldsTab({ value, onChange, onSave, disabled }) {
     return errs;
   }, [fields, counts, total]);
 
-  // ручное сохранение — осталось без изменений, но синхронизируем бейджи
+  // ручное сохранение — синхронизируем бейджи
   const manualSave = async () => {
-    if (!onSave) return;
-    try {
-      setSavingState('saving');
-      await onSave(fields);
-      setSavingState('saved');
-      setTimeout(() => setSavingState('idle'), 1200);
-    } catch {
-      setSavingState('idle');
-    }
+    await doSave();
   };
 
   return (
@@ -247,7 +257,7 @@ export default function FieldsTab({ value, onChange, onSave, disabled }) {
             key={f.id || i}
             L={L}
             field={f}
-            onChange={(nf) => updateAt(i, nf)}
+            onChange={(nf, opts) => updateAt(i, nf, opts)}
             onRemove={() => removeAt(i)}
             onDragStart={() => setDragIndex(i)}
             onDragOver={() => {}}
@@ -258,12 +268,13 @@ export default function FieldsTab({ value, onChange, onSave, disabled }) {
               next.splice(i, 0, moved);
               setDragIndex(null);
               onChange?.(next);
+              scheduleSave({ immediate: true });
             }}
           />
         ))}
       </div>
 
-      {/* Панель действий */}
+      {/* При необходимости вернёшь ручную кнопку */}
       {/* <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button type="button" onClick={manualSave} disabled={disabled || !!errors.length}>
           {L.save}
