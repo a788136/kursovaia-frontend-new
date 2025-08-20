@@ -264,12 +264,12 @@ export default function FieldsTab({ value, onChange, onSave, disabled }) {
       </div>
 
       {/* Панель действий */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      {/* <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button type="button" onClick={manualSave} disabled={disabled || !!errors.length}>
           {L.save}
         </button>
         <div style={{ fontSize: 12, color: '#666' }}>{L.hint}</div>
-      </div>
+      </div> */}
     </div>
   );
 }
