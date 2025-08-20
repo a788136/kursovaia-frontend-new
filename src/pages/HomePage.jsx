@@ -1,3 +1,4 @@
+// src/pages/HomePage.jsx
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { inventoryService } from '../services/inventoryService';
@@ -89,6 +90,13 @@ function formatDate(row) {
   return d ? new Date(d).toLocaleDateString() : '—';
 }
 
+// ——— helper: надёжная проверка наличия тега у инвентаризации
+function hasTag(inv, tag) {
+  if (!tag) return true;
+  const arr = Array.isArray(inv?.tags) ? inv.tags : [];
+  return arr.some((t) => String(t).toLowerCase() === String(tag).toLowerCase());
+}
+
 /** «Таблица» на div-ах */
 function ListSection({ title, items, emptyText, L, navigate, toolbarRight = null }) {
   const GRID_COLS = '4rem 2fr 1.2fr 3fr 1.1fr';
@@ -121,7 +129,7 @@ function ListSection({ title, items, emptyText, L, navigate, toolbarRight = null
               key={row._id}
               role="row"
               onClick={() => navigate(`/inventories/${row._id}`)}
-              className="px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer border-t border-gray-100 dark:border-gray-800"
+              className="px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer border-top border-gray-100 dark:border-gray-800"
               style={{ display: 'grid', gridTemplateColumns: GRID_COLS, alignItems: 'center' }}
               title={row.name || 'Inventory'}
             >
@@ -271,9 +279,14 @@ export default function HomePage({ user, lang: langProp }) {
       if (!selectedTag) { setTagItems([]); return; }
       setLoadingTagItems(true);
       try {
+        // 1) пробуем получить с бэка по тегу (если бэк умеет ?tag=)
         const res = await inventoryService.getAll({ tag: selectedTag, limit: 24 });
         const list = Array.isArray(res) ? res : (res?.items ?? []);
-        if (!dead) setTagItems(list.map(normalize));
+        // 2) нормализуем
+        let normalized = list.map(normalize);
+        // 3) ГАРАНТИЯ: дополнительная клиентская фильтрация по выбранному тегу
+        normalized = normalized.filter((inv) => hasTag(inv, selectedTag));
+        if (!dead) setTagItems(normalized);
       } finally {
         if (!dead) setLoadingTagItems(false);
       }
