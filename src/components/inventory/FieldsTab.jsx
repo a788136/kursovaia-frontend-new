@@ -1,46 +1,83 @@
-import React, { useMemo, useState } from 'react';
+// src/components/inventory/FieldsTab.jsx
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const TYPE_LIMITS = { shortText: 3, longText: 3, number: 3, link: 3, checkbox: 3 };
-const TYPE_LABEL = { shortText: 'Строка', longText: 'Текст', number: 'Число', link: 'Ссылка', checkbox: 'Флажок' };
-const MAX_TOTAL = 15;
+const TYPE_LABEL  = { shortText: 'Строка', longText: 'Текст', number: 'Число', link: 'Ссылка', checkbox: 'Флажок' };
+const MAX_TOTAL   = 15;
 
 const keyOk = (k) => /^[a-z][a-z0-9_]*$/i.test(k);
-const uid = () => Math.random().toString(36).slice(2, 9);
+const uid   = () => Math.random().toString(36).slice(2, 9);
 
-function FieldRow({ field, onChange, onRemove, onDragStart, onDragOver, onDrop }) {
+// простой i18n только для бейджей/кнопки
+const I18N = {
+  ru: {
+    saving: 'Сохранение…',
+    saved: 'Все изменения сохранены',
+    problems: 'Проблемы:',
+    save: 'Сохранить',
+    hint: 'Перетаскивай карточки для сортировки. Лимиты применяются сразу.',
+    type: 'Тип',
+    key: 'Ключ*',
+    label: 'Название',
+    showInTable: 'В таблице',
+    placeholderKey: 'latin, unique',
+    placeholderLabel: 'Отображаемое имя',
+    tooltip: 'Tooltip / подсказка',
+    delete: 'Удалить',
+    helper: 'Подсказка',
+  },
+  en: {
+    saving: 'Saving…',
+    saved: 'All changes saved',
+    problems: 'Issues:',
+    save: 'Save',
+    hint: 'Drag cards to reorder. Limits apply immediately.',
+    type: 'Type',
+    key: 'Key*',
+    label: 'Label',
+    showInTable: 'In table',
+    placeholderKey: 'latin, unique',
+    placeholderLabel: 'Display name',
+    tooltip: 'Tooltip',
+    delete: 'Delete',
+    helper: 'Hint',
+  },
+};
+
+function FieldRow({ L, field, onChange, onRemove, onDragStart, onDragOver, onDrop }) {
   return (
     <div
       draggable
       onDragStart={onDragStart}
       onDragOver={(e) => { e.preventDefault(); onDragOver?.(e); }}
       onDrop={onDrop}
-      style={{ border: '1px solid #ddd', borderRadius: 12, padding: 12 }}
+      style={{ border: '1px solid #ddd', borderRadius: 12, padding: 12, background: '#fff' }}
     >
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, alignItems: 'center' }}>
         <div>
-          <div style={{ fontSize: 12, color: '#666' }}>Тип</div>
+          <div style={{ fontSize: 12, color: '#666' }}>{L.type}</div>
           <div style={{ fontWeight: 600 }}>{TYPE_LABEL[field.type]}</div>
         </div>
         <div>
-          <label style={{ fontSize: 12, color: '#666' }}>Ключ*</label>
+          <label style={{ fontSize: 12, color: '#666' }}>{L.key}</label>
           <input
             value={field.key}
             onChange={(e) => onChange({ ...field, key: e.target.value })}
-            placeholder="latin, unique"
+            placeholder={L.placeholderKey}
             style={{ width: '100%' }}
           />
         </div>
         <div>
-          <label style={{ fontSize: 12, color: '#666' }}>Название</label>
+          <label style={{ fontSize: 12, color: '#666' }}>{L.label}</label>
           <input
             value={field.label || ''}
             onChange={(e) => onChange({ ...field, label: e.target.value })}
-            placeholder="Отображаемое имя"
+            placeholder={L.placeholderLabel}
             style={{ width: '100%' }}
           />
         </div>
         <div style={{ textAlign: 'right' }}>
-          <label style={{ fontSize: 12, color: '#666', display: 'block' }}>В таблице</label>
+          <label style={{ fontSize: 12, color: '#666', display: 'block' }}>{L.showInTable}</label>
           <input
             type="checkbox"
             checked={!!field.showInTable}
@@ -50,11 +87,11 @@ function FieldRow({ field, onChange, onRemove, onDragStart, onDragOver, onDrop }
       </div>
 
       <div style={{ marginTop: 8 }}>
-        <label style={{ fontSize: 12, color: '#666' }}>Подсказка</label>
+        <label style={{ fontSize: 12, color: '#666' }}>{L.helper}</label>
         <textarea
           value={field.hint || ''}
           onChange={(e) => onChange({ ...field, hint: e.target.value })}
-          placeholder="Tooltip / подсказка"
+          placeholder={L.tooltip}
           rows={2}
           style={{ width: '100%' }}
         />
@@ -62,7 +99,7 @@ function FieldRow({ field, onChange, onRemove, onDragStart, onDragOver, onDrop }
 
       <div style={{ marginTop: 8, textAlign: 'right' }}>
         <button type="button" onClick={onRemove} style={{ color: '#b00020' }}>
-          Удалить
+          {L.delete}
         </button>
       </div>
     </div>
@@ -70,9 +107,50 @@ function FieldRow({ field, onChange, onRemove, onDragStart, onDragOver, onDrop }
 }
 
 export default function FieldsTab({ value, onChange, onSave, disabled }) {
+  const lang = (localStorage.getItem('lang') || 'ru').toLowerCase().startsWith('en') ? 'en' : 'ru';
+  const L = I18N[lang];
+
   const [dragIndex, setDragIndex] = useState(null);
   const fields = value || [];
 
+  // --- AUTOSAVE state/refs (как в CustomIdTab) ---
+  const [savingState, setSavingState] = useState('idle'); // 'idle' | 'saving' | 'saved'
+  const saveTimer = useRef(null);
+  const isComposingRef = useRef(false);
+
+  // IME guard — не стартуем таймер во время набора составных символов
+  useEffect(() => {
+    const onStart = () => { isComposingRef.current = true; };
+    const onEnd   = () => { isComposingRef.current = false; };
+    window.addEventListener('compositionstart', onStart);
+    window.addEventListener('compositionend', onEnd);
+    return () => {
+      window.removeEventListener('compositionstart', onStart);
+      window.removeEventListener('compositionend', onEnd);
+    };
+  }, []);
+
+  // AUTOSAVE: откладываем onSave на 8 секунд после любого изменения набора полей
+  useEffect(() => {
+    if (!onSave || disabled) return; // если нет обработчика сохранения — ничего не делаем
+    clearTimeout(saveTimer.current);
+    if (isComposingRef.current) return;
+
+    saveTimer.current = setTimeout(async () => {
+      try {
+        setSavingState('saving');
+        await onSave(fields);
+        setSavingState('saved');
+        setTimeout(() => setSavingState('idle'), 1200);
+      } catch {
+        setSavingState('idle'); // тихо гасим — явные ошибки пусть показывает родитель
+      }
+    }, 8000);
+
+    return () => clearTimeout(saveTimer.current);
+  }, [fields, onSave, disabled]);
+
+  // ---- подсчёты/валидация как было ----
   const counts = useMemo(
     () => fields.reduce((acc, f) => ((acc[f.type] = (acc[f.type] || 0) + 1), acc), {}),
     [fields]
@@ -106,8 +184,43 @@ export default function FieldsTab({ value, onChange, onSave, disabled }) {
     return errs;
   }, [fields, counts, total]);
 
+  // ручное сохранение — осталось без изменений, но синхронизируем бейджи
+  const manualSave = async () => {
+    if (!onSave) return;
+    try {
+      setSavingState('saving');
+      await onSave(fields);
+      setSavingState('saved');
+      setTimeout(() => setSavingState('idle'), 1200);
+    } catch {
+      setSavingState('idle');
+    }
+  };
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
+      {/* Шапка с бейджем состояния сохранения */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 18, fontWeight: 600 }}>Поля</div>
+        {savingState === 'saved' && (
+          <span style={{
+            fontSize: 12, background: '#E8F5E9', color: '#1B5E20',
+            padding: '4px 10px', borderRadius: 999
+          }}>
+            {L.saved}
+          </span>
+        )}
+        {savingState === 'saving' && (
+          <span style={{
+            fontSize: 12, background: '#FFF3E0', color: '#E65100',
+            padding: '4px 10px', borderRadius: 999
+          }}>
+            {L.saving}
+          </span>
+        )}
+      </div>
+
+      {/* Кнопки добавления типов */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {Object.keys(TYPE_LABEL).map((t) => (
           <button key={t} type="button" disabled={!canAdd(t) || disabled} onClick={() => addField(t)}>
@@ -118,7 +231,7 @@ export default function FieldsTab({ value, onChange, onSave, disabled }) {
 
       {!!errors.length && (
         <div style={{ border: '1px solid #f5c2c7', background: '#f8d7da', padding: 12, borderRadius: 8, color: '#842029' }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Проблемы:</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{L.problems}</div>
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             {errors.map((e, i) => (
               <li key={i}>{e}</li>
@@ -127,10 +240,12 @@ export default function FieldsTab({ value, onChange, onSave, disabled }) {
         </div>
       )}
 
+      {/* Список полей */}
       <div style={{ display: 'grid', gap: 10 }}>
         {fields.map((f, i) => (
           <FieldRow
             key={f.id || i}
+            L={L}
             field={f}
             onChange={(nf) => updateAt(i, nf)}
             onRemove={() => removeAt(i)}
@@ -148,11 +263,12 @@ export default function FieldsTab({ value, onChange, onSave, disabled }) {
         ))}
       </div>
 
+      {/* Панель действий */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <button type="button" onClick={() => onSave?.(fields)} disabled={disabled || !!errors.length}>
-          Сохранить
+        <button type="button" onClick={manualSave} disabled={disabled || !!errors.length}>
+          {L.save}
         </button>
-        <div style={{ fontSize: 12, color: '#666' }}>Перетаскивай карточки для сортировки. Лимиты применяются сразу.</div>
+        <div style={{ fontSize: 12, color: '#666' }}>{L.hint}</div>
       </div>
     </div>
   );
