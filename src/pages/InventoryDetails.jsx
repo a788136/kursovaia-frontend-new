@@ -179,17 +179,6 @@ export default function InventoryDetails({ user, lang: langProp }) {
         </div>
       </div>
 
-      {/* Роли пользователя относительно этой инвентаризации */}
-      {Array.isArray(inventory?.userRoles) && inventory.userRoles.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          {inventory.userRoles.map((r) => (
-            <span key={r} className="rounded-full border px-2 py-0.5 text-xs capitalize">
-              {r}
-            </span>
-          ))}
-        </div>
-      )}
-
       {error && (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-red-700">
           {error}
