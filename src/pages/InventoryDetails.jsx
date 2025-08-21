@@ -13,10 +13,6 @@ import AccessTab from "../components/inventory/AccessTab";
 import StatsTab from "../components/inventory/StatsTab";
 import ExportTab from "../components/inventory/ExportTab";
 
-/**
- * Локальные переводы страницы. Если прилетит t/lang из App — можно будет
- * переключиться на централизованный словарь, но сейчас делаем автономно.
- */
 const DICT = {
   ru: {
     tabs: {
@@ -67,11 +63,9 @@ const DICT = {
 };
 
 export default function InventoryDetails({ user, lang: langProp }) {
-  // язык: из пропсов -> из localStorage -> ru
   const lang = (langProp || localStorage.getItem("lang") || "ru").toLowerCase().startsWith("en") ? "en" : "ru";
   const L = DICT[lang];
 
-  // табы с локализованными подписями (значения — прежние, чтобы ссылки и логика не ломались)
   const TAB_VALUES = useMemo(
     () => [
       { value: "items", label: L.tabs.items },
@@ -124,13 +118,8 @@ export default function InventoryDetails({ user, lang: langProp }) {
     };
   }, [id, L.errors.loadFailed]);
 
-  // Пример значений для предпросмотра блока "Поле" в Custom ID
   const sampleFields = useMemo(
-    () => ({
-      brand: "ACME",
-      model: "Z-500",
-      year: "2025",
-    }),
+    () => ({ brand: "ACME", model: "Z-500", year: "2025" }),
     []
   );
 
@@ -194,7 +183,6 @@ export default function InventoryDetails({ user, lang: langProp }) {
       ) : (
         <div className="mt-6">
           {activeTab === "items" && <ItemsTab inventory={inventory} />}
-          {/* Прокидываем user в ChatTab */}
           {activeTab === "chat" && <ChatTab inventory={inventory} user={user} />}
           {activeTab === "settings" && <SettingsTab inventory={inventory} />}
 
@@ -202,9 +190,7 @@ export default function InventoryDetails({ user, lang: langProp }) {
             <CustomIdTab
               lang={lang}
               value={inventory.customIdFormat || { enabled: true, separator: "-", elements: [] }}
-              onChange={(cfg) =>
-                setInventory((prev) => ({ ...(prev || {}), customIdFormat: cfg }))
-              }
+              onChange={(cfg) => setInventory((prev) => ({ ...(prev || {}), customIdFormat: cfg }))}
               onSave={handleSaveCustomId}
               disabled={saving}
               sampleFields={sampleFields}
@@ -222,7 +208,9 @@ export default function InventoryDetails({ user, lang: langProp }) {
             />
           )}
 
-          {activeTab === "access" && <AccessTab inventory={inventory} />}
+          {/* ВАЖНО: передаём user, чтобы в AccessTab работали права и назначение ролей */}
+          {activeTab === "access" && <AccessTab inventory={inventory} user={user} />}
+
           {activeTab === "stats" && <StatsTab inventory={inventory} />}
           {activeTab === "export" && <ExportTab inventory={inventory} />}
         </div>

@@ -16,7 +16,7 @@ export default function AccessTab({ inventory, user }) {
   const [newAccess, setNewAccess] = useState('read');
   const [saving, setSaving] = useState(false);
 
-  // ===== Новое: управление глобальной ролью (только для админов) =====
+  // ===== Новое: управление глобальной ролью (видно только админам) =====
   const canAssignRoles = useMemo(
     () => !!(user && (user.isAdmin || user.role === 'admin')),
     [user]
@@ -26,7 +26,7 @@ export default function AccessTab({ inventory, user }) {
   const [roleTarget, setRoleTarget] = useState(null); // {id, name, email, avatar, role?}
   const [roleValue, setRoleValue] = useState('user');
   const [roleSaving, setRoleSaving] = useState(false);
-  // для строк в таблице (быстрый просмотр текущей роли без перезагрузки)
+  // Карта текущих глобальных ролей для пользователей из списка доступа
   const [roleMap, setRoleMap] = useState({}); // { [userId]: 'user' | 'admin' }
 
   const canManage = useMemo(() => {
@@ -50,13 +50,11 @@ export default function AccessTab({ inventory, user }) {
         const arr = Array.isArray(data.items) ? data.items : [];
         setItems(arr);
 
-        // подгрузим роли для отображения, но только если админ (остальным роли не нужны)
+        // если админ — подхватим глобальные роли для отображения
         if (canAssignRoles && arr.length) {
           const ids = Array.from(new Set(arr.map((x) => String(x.user?.id)).filter(Boolean)));
           try {
-            const results = await Promise.all(
-              ids.map((id) => usersService.getById(id).catch(() => null))
-            );
+            const results = await Promise.all(ids.map((id) => usersService.getById(id).catch(() => null)));
             const map = {};
             results.forEach((u) => {
               if (u && (u._id || u.id)) {
@@ -78,7 +76,7 @@ export default function AccessTab({ inventory, user }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invId, canAssignRoles]);
 
-  // Автокомплит для добавления доступа
+  // Автокомплит (выдача доступа)
   useEffect(() => {
     let dead = false;
     const id = setTimeout(async () => {
@@ -93,7 +91,7 @@ export default function AccessTab({ inventory, user }) {
     return () => { dead = true; clearTimeout(id); };
   }, [query]);
 
-  // Автокомплит для назначения роли (только админ)
+  // Автокомплит для назначения роли (админ)
   useEffect(() => {
     if (!canAssignRoles) return;
     let dead = false;
@@ -150,15 +148,15 @@ export default function AccessTab({ inventory, user }) {
     await applyChanges({ changes: [{ userId, accessType: next }], remove: [] });
   };
 
-  // ===== Новое: сохранить роль пользователю (admin-only) =====
+  // ===== Назначение глобальной роли (admin-only) =====
   async function saveUserRole() {
     if (!roleTarget) return;
     try {
       setRoleSaving(true);
       const saved = await usersService.setRole(roleTarget.id, roleValue);
-      // Обновим локальную карту ролей (и таргет)
       const uid = String(roleTarget.id);
-      setRoleMap((m) => ({ ...m, [uid]: (saved.user?.role === 'admin' || saved.user?.isAdmin) ? 'admin' : (saved.user?.role || roleValue) }));
+      const savedRole = (saved.user?.role === 'admin' || saved.user?.isAdmin) ? 'admin' : (saved.user?.role || roleValue);
+      setRoleMap((m) => ({ ...m, [uid]: savedRole }));
     } catch (e) {
       setError(e?.response?.data?.error || e?.message || 'Не удалось назначить роль');
     } finally {
@@ -166,7 +164,6 @@ export default function AccessTab({ inventory, user }) {
     }
   }
 
-  // при выборе пользователя в блоке назначения роли — подтянем текущую роль
   async function pickRoleTarget(u) {
     setRoleTarget(u);
     setRoleQuery(u.name || u.email || '');
@@ -229,7 +226,6 @@ export default function AccessTab({ inventory, user }) {
                     </div>
                   </div>
 
-                  {/* управление уровнем доступа к этой инвентаризации */}
                   <div className="flex items-center gap-2">
                     {canManage ? (
                       <>
@@ -254,7 +250,7 @@ export default function AccessTab({ inventory, user }) {
                       <span className="rounded-md bg-gray-100 px-2 py-1 text-xs">{row.accessType}</span>
                     )}
 
-                    {/* Новое: глобальная роль — только для админов */}
+                    {/* Глобальная роль — видно только админам */}
                     {canAssignRoles && (
                       <div className="ml-2 flex items-center gap-1">
                         <span className="text-xs opacity-60">роль:</span>
@@ -262,14 +258,14 @@ export default function AccessTab({ inventory, user }) {
                           value={role || 'user'}
                           onChange={async (e) => {
                             const next = e.target.value;
+                            const prev = role || 'user';
+                            setRoleMap((m) => ({ ...m, [uid]: next })); // оптимистично
                             try {
-                              setRoleMap((m) => ({ ...m, [uid]: next })); // оптимистично
                               const saved = await usersService.setRole(uid, next);
                               const savedRole = (saved.user?.role === 'admin' || saved.user?.isAdmin) ? 'admin' : (saved.user?.role || next);
                               setRoleMap((m) => ({ ...m, [uid]: savedRole }));
-                            } catch (err) {
-                              // откат если ошибка
-                              setRoleMap((m) => ({ ...m, [uid]: role || 'user' }));
+                            } catch {
+                              setRoleMap((m) => ({ ...m, [uid]: prev })); // откат при ошибке
                             }
                           }}
                           className="rounded-md border px-2 py-1 text-xs"
@@ -338,7 +334,7 @@ export default function AccessTab({ inventory, user }) {
             </div>
           )}
 
-          {/* Новый административный блок: назначение роли любому пользователю */}
+          {/* Админский блок: назначение роли любому пользователю */}
           {canAssignRoles && (
             <div className="mt-6 rounded-2xl border p-4">
               <div className="mb-2 text-sm opacity-70">Назначение глобальной роли (админ)</div>
