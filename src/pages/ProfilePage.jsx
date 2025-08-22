@@ -126,7 +126,7 @@ export default function ProfilePage({ user }) {
   const [writableLoading, setWritableLoading] = useState(false);
   const [writableError, setWritableError] = useState('');
 
-  // Загрузка "мои инвентаризации" ТОЛЬКО текущего пользователя
+  // Загрузка "мои инвентаризации" — ТОЛЬКО текущего пользователя
   useEffect(() => {
     let dead = false;
     (async () => {
@@ -146,7 +146,7 @@ export default function ProfilePage({ user }) {
     return () => { dead = true; };
   }, [user]);
 
-  // Загрузка "инвентаризации с write-доступом"
+  // Загрузка "инвентаризации с write-доступом" — БЕЗ собственных (excludeOwner=true)
   useEffect(() => {
     let dead = false;
 
@@ -155,18 +155,30 @@ export default function ProfilePage({ user }) {
       setWritableLoading(true);
       setWritableError('');
       try {
-        // Основной путь — фильтр на бэке
         let rows = [];
+
+        // Вариант A (предпочтительно): /inventories?access=write&excludeOwner=true
         try {
-          const res = await inventoryService.getAll({ access: 'write', limit: 200 });
+          const res = await inventoryService.getAll({ access: 'write', excludeOwner: true, limit: 200 });
           const list = Array.isArray(res) ? res : (res?.items ?? []);
           rows = list || [];
         } catch {}
 
-        // Фолбэк — через /access/my?type=write
+        // Вариант B: /access/my?type=write&excludeOwner=true
         if (!rows.length) {
           try {
-            const { data } = await http.get('/access/my', { params: { type: 'write' } });
+            const { data } = await http.get('/access/my', { params: { type: 'write', excludeOwner: true } });
+            if (Array.isArray(data?.items)) {
+              const withDocs = data.items.map((x) => x.inventory).filter(Boolean);
+              rows = withDocs;
+            }
+          } catch {}
+        }
+
+        // Вариант C (на случай совместимости со старыми окружениями): /inventory-access/my
+        if (!rows.length) {
+          try {
+            const { data } = await http.get('/inventory-access/my', { params: { type: 'write', excludeOwner: true } });
             if (Array.isArray(data?.items)) {
               const withDocs = data.items.map((x) => x.inventory).filter(Boolean);
               rows = withDocs;
@@ -235,7 +247,7 @@ export default function ProfilePage({ user }) {
         />
       </div>
 
-      {/* Инвентаризации с write-доступом */}
+      {/* Инвентаризации с write-доступом (без собственных) */}
       <div className="space-y-2">
         {writableLoading && <div className="text-sm text-gray-500">Загрузка инвентаризаций с доступом на запись…</div>}
         {!!writableError && <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-yellow-800 text-sm">{writableError}</div>}

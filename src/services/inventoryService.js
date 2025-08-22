@@ -1,8 +1,8 @@
 // src/services/inventoryService.js
 // Универсальный fetch-сервис для /inventories и смежных публичных эндпойнтов.
 // Исправлено/дополнено:
-//  - getAll теперь принимает owner, access, tag, category, page/limit/skip
-//  - если запрос требует авторизации (owner=me или access=write/read), автоматически добавляется Bearer JWT
+//  - getAll теперь принимает owner, access, tag, category, page/limit/skip, excludeOwner
+//  - если запрос требует авторизации (owner=me или access=write/read), автоматически подставляем Bearer JWT
 
 import { getToken } from '../api/token';
 
@@ -34,7 +34,7 @@ export const inventoryService = {
   /**
    * Список инвентаризаций.
    * Параметры:
-   *  - q, owner ('me' | userId), access ('write'|'read'), tag, category, limit, page, skip
+   *  - q, owner ('me' | userId), access ('write'|'read'), tag, category, limit, page, skip, excludeOwner (boolean)
    * JWT добавляем только когда нужно (owner=me или access задан).
    */
   async getAll({
@@ -46,6 +46,7 @@ export const inventoryService = {
     limit = 20,
     page,
     skip,
+    excludeOwner, // NEW
   } = {}) {
     const params = new URLSearchParams();
     if (q)        params.set('q', q);
@@ -56,6 +57,7 @@ export const inventoryService = {
     if (limit != null) params.set('limit', String(limit));
     if (page  != null) params.set('page', String(page));
     if (skip  != null) params.set('skip', String(skip));
+    if (excludeOwner)  params.set('excludeOwner', 'true'); // NEW
 
     // Нужен ли JWT для этого запроса?
     const needAuth = owner === 'me' || access === 'write' || access === 'read';
