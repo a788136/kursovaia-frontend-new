@@ -1,5 +1,5 @@
 // src/pages/ProfilePage.jsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { inventoryService } from '../services/inventoryService';
 import http from '../api/http';
@@ -126,7 +126,7 @@ export default function ProfilePage({ user }) {
   const [writableLoading, setWritableLoading] = useState(false);
   const [writableError, setWritableError] = useState('');
 
-  // Загрузка "мои инвентаризации" — ТОЛЬКО текущего пользователя
+  // Загрузка "Мои инвентаризации" — ТЕПЕРЬ по owner=me
   useEffect(() => {
     let dead = false;
     (async () => {
@@ -146,7 +146,7 @@ export default function ProfilePage({ user }) {
     return () => { dead = true; };
   }, [user]);
 
-  // Загрузка "инвентаризации с write-доступом" — БЕЗ собственных (excludeOwner=true)
+  // Загрузка "Инвентаризации с write-доступом" — без своих (excludeOwner=true)
   useEffect(() => {
     let dead = false;
 
@@ -155,35 +155,56 @@ export default function ProfilePage({ user }) {
       setWritableLoading(true);
       setWritableError('');
       try {
-        let rows = [];
+        let data = null;
 
-        // Вариант A (предпочтительно): /inventories?access=write&excludeOwner=true
+        // Вариант A: /access/my?type=write&excludeOwner=true
         try {
-          const res = await inventoryService.getAll({ access: 'write', excludeOwner: true, limit: 200 });
-          const list = Array.isArray(res) ? res : (res?.items ?? []);
-          rows = list || [];
+          const resp = await http.get('/access/my', { params: { type: 'write', excludeOwner: true } });
+          data = resp.data;
         } catch {}
 
-        // Вариант B: /access/my?type=write&excludeOwner=true
-        if (!rows.length) {
+        // Вариант B (fallback): /inventory-access/my?type=write&excludeOwner=true
+        if (!data) {
           try {
-            const { data } = await http.get('/access/my', { params: { type: 'write', excludeOwner: true } });
-            if (Array.isArray(data?.items)) {
-              const withDocs = data.items.map((x) => x.inventory).filter(Boolean);
-              rows = withDocs;
-            }
+            const resp = await http.get('/inventory-access/my', { params: { type: 'write', excludeOwner: true } });
+            data = resp.data;
           } catch {}
         }
 
-        // Вариант C (на случай совместимости со старыми окружениями): /inventory-access/my
-        if (!rows.length) {
+        // Вариант C (fallback): /inventories?access=write&excludeOwner=true
+        if (!data) {
           try {
-            const { data } = await http.get('/inventory-access/my', { params: { type: 'write', excludeOwner: true } });
-            if (Array.isArray(data?.items)) {
-              const withDocs = data.items.map((x) => x.inventory).filter(Boolean);
-              rows = withDocs;
-            }
+            const resp = await http.get('/inventories', { params: { access: 'write', excludeOwner: true, limit: 100 } });
+            data = resp.data;
           } catch {}
+        }
+
+        let rows = [];
+        if (data) {
+          if (Array.isArray(data.items) && data.items.length && (data.items[0].title || data.items[0].name || data.items[0]._id)) {
+            rows = data.items;
+          } else if (Array.isArray(data.items)) {
+            const withDocs = data.items.map((x) => x.inventory).filter(Boolean);
+            rows = withDocs;
+
+            const ids = data.items
+              .map((x) => x.inventoryId || x.inventory_id)
+              .filter(Boolean)
+              .map(String);
+
+            const needFetch = ids.filter(id => !withDocs.some(doc => String(doc?._id) === id));
+            if (needFetch.length) {
+              const uniq = Array.from(new Set(needFetch));
+              const fetched = await Promise.all(
+                uniq.map(id => http.get(`/inventories/${id}`).then(r => r.data).catch(() => null))
+              );
+              rows = rows.concat(fetched.filter(Boolean));
+            }
+          }
+        }
+
+        if (!data) {
+          throw new Error('Эндпойнт списка write-доступов не найден');
         }
 
         if (!dead) setWritable((rows || []).map(normalize));
@@ -212,7 +233,7 @@ export default function ProfilePage({ user }) {
 
   return (
     <div className="space-y-10">
-      {/* Блок профиля как был */}
+      {/* Профиль */}
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800">
         <h1 className="text-2xl font-semibold mb-4">Привет, {user.name}!</h1>
         <div className="text-sm text-gray-600 dark:text-gray-400">
@@ -221,7 +242,6 @@ export default function ProfilePage({ user }) {
           <div>Тема: <span className="font-medium">{user.theme}</span></div>
           <div>Создан: {new Date(user.createdAt).toLocaleString()}</div>
 
-          {/* Глобальные роли пользователя */}
           {Array.isArray(user.roles) && user.roles.length > 0 && (
             <div className="mt-4">
               <div className="mb-1 opacity-70">Роли</div>
@@ -247,7 +267,7 @@ export default function ProfilePage({ user }) {
         />
       </div>
 
-      {/* Инвентаризации с write-доступом (без собственных) */}
+      {/* Инвентаризации с write-доступом */}
       <div className="space-y-2">
         {writableLoading && <div className="text-sm text-gray-500">Загрузка инвентаризаций с доступом на запись…</div>}
         {!!writableError && <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-yellow-800 text-sm">{writableError}</div>}

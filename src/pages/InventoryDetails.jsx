@@ -208,7 +208,7 @@ export default function InventoryDetails({ user, lang: langProp }) {
             />
           )}
 
-          {/* ВАЖНО: передаём user, чтобы в AccessTab работали права и назначение ролей */}
+          {/* user передаём — чтобы владелец/админ мог назначать доступы */}
           {activeTab === "access" && <AccessTab inventory={inventory} user={user} />}
 
           {activeTab === "stats" && <StatsTab inventory={inventory} />}

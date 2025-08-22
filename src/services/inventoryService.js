@@ -1,8 +1,6 @@
 // src/services/inventoryService.js
 // Универсальный fetch-сервис для /inventories и смежных публичных эндпойнтов.
-// Исправлено/дополнено:
-//  - getAll теперь принимает owner, access, tag, category, page/limit/skip, excludeOwner
-//  - если запрос требует авторизации (owner=me или access=write/read), автоматически подставляем Bearer JWT
+// Исправлено: поддержка owner/tag/category/access/excludeOwner/page/skip + Bearer.
 
 import { getToken } from '../api/token';
 
@@ -32,43 +30,40 @@ async function handle(res) {
 
 export const inventoryService = {
   /**
-   * Список инвентаризаций.
-   * Параметры:
-   *  - q, owner ('me' | userId), access ('write'|'read'), tag, category, limit, page, skip, excludeOwner (boolean)
-   * JWT добавляем только когда нужно (owner=me или access задан).
+   * Список (публично / с фильтрами).
+   * Поддержка:
+   *  - q, owner, tag, category
+   *  - access ('write' | 'read')
+   *  - excludeOwner (true/false)
+   *  - limit, page, skip
    */
-  async getAll({
-    q = '',
-    owner,
-    access,
-    tag,
-    category,
-    limit = 20,
-    page,
-    skip,
-    excludeOwner, // NEW
-  } = {}) {
-    const params = new URLSearchParams();
-    if (q)        params.set('q', q);
-    if (owner)    params.set('owner', owner);
-    if (access)   params.set('access', access);
-    if (tag)      params.set('tag', String(tag).trim().toLowerCase());
-    if (category) params.set('category', String(category).trim());
-    if (limit != null) params.set('limit', String(limit));
-    if (page  != null) params.set('page', String(page));
-    if (skip  != null) params.set('skip', String(skip));
-    if (excludeOwner)  params.set('excludeOwner', 'true'); // NEW
+  async getAll(paramsObj = {}) {
+    const {
+      q = '',
+      owner,
+      tag,
+      category,
+      access,
+      excludeOwner,
+      limit = 20,
+      page,
+      skip,
+    } = paramsObj;
 
-    // Нужен ли JWT для этого запроса?
-    const needAuth = owner === 'me' || access === 'write' || access === 'read';
-    const headers = {
-      Accept: 'application/json',
-      ...(needAuth ? authHeaders() : {}),
-    };
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (owner != null) params.set('owner', String(owner));
+    if (tag) params.set('tag', String(tag));
+    if (category) params.set('category', String(category));
+    if (access) params.set('access', String(access)); // требует JWT на бэке
+    if (excludeOwner != null) params.set('excludeOwner', String(!!excludeOwner));
+    if (limit != null) params.set('limit', String(limit));
+    if (page != null) params.set('page', String(page));
+    if (skip != null) params.set('skip', String(skip));
 
     const res = await fetch(url(`/inventories?${params.toString()}`), {
       method: 'GET',
-      headers,
+      headers: { Accept: 'application/json', ...authHeaders() }, // токен не мешает
     });
     return handle(res);
   },
