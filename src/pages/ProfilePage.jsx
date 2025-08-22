@@ -126,7 +126,7 @@ export default function ProfilePage({ user }) {
   const [writableLoading, setWritableLoading] = useState(false);
   const [writableError, setWritableError] = useState('');
 
-  // Загрузка "мои инвентаризации"
+  // Загрузка "мои инвентаризации" ТОЛЬКО текущего пользователя
   useEffect(() => {
     let dead = false;
     (async () => {
@@ -134,7 +134,6 @@ export default function ProfilePage({ user }) {
       setMineLoading(true);
       setMineError('');
       try {
-        // Бэкенд уже поддерживает owner=me (см. routes/inventories.core.js)
         const res = await inventoryService.getAll({ owner: 'me', limit: 100 });
         const list = Array.isArray(res) ? res : (res?.items ?? []);
         if (!dead) setMine(list.map(normalize));
@@ -156,64 +155,23 @@ export default function ProfilePage({ user }) {
       setWritableLoading(true);
       setWritableError('');
       try {
-        // 1) Пытаемся получить списком с бэка (несколько вероятных эндпойнтов)
-        let data = null;
-
-        // Вариант A: /access/my?type=write  → { items: [{ inventory: {...} } | { inventoryId }] }
+        // Основной путь — фильтр на бэке
+        let rows = [];
         try {
-          const resp = await http.get('/access/my', { params: { type: 'write' } });
-          data = resp.data;
+          const res = await inventoryService.getAll({ access: 'write', limit: 200 });
+          const list = Array.isArray(res) ? res : (res?.items ?? []);
+          rows = list || [];
         } catch {}
 
-        // Вариант B: /inventory-access/my?type=write
-        if (!data) {
+        // Фолбэк — через /access/my?type=write
+        if (!rows.length) {
           try {
-            const resp = await http.get('/inventory-access/my', { params: { type: 'write' } });
-            data = resp.data;
-          } catch {}
-        }
-
-        // Вариант C: /inventories?access=write  → { items: [inventories...] }
-        if (!data) {
-          try {
-            const resp = await http.get('/inventories', { params: { access: 'write', limit: 100 } });
-            data = resp.data;
-          } catch {}
-        }
-
-        let rows = [];
-        if (data) {
-          // если сразу вернулись инвентаризации
-          if (Array.isArray(data.items) && data.items.length && (data.items[0].title || data.items[0].name || data.items[0]._id)) {
-            rows = data.items;
-          } else if (Array.isArray(data.items)) {
-            // items: [{ inventory }, { inventoryId }]
-            const withDocs = data.items
-              .map((x) => x.inventory)
-              .filter(Boolean);
-            rows = withDocs;
-
-            // добрать по ID, если есть только id
-            const ids = data.items
-              .map((x) => x.inventoryId || x.inventory_id)
-              .filter(Boolean)
-              .map(String);
-
-            const needFetch = ids.filter(id => !withDocs.some(doc => String(doc?._id) === id));
-            if (needFetch.length) {
-              const uniq = Array.from(new Set(needFetch));
-              const fetched = await Promise.all(
-                uniq.map(id => http.get(`/inventories/${id}`).then(r => r.data).catch(() => null))
-              );
-              rows = rows.concat(fetched.filter(Boolean));
+            const { data } = await http.get('/access/my', { params: { type: 'write' } });
+            if (Array.isArray(data?.items)) {
+              const withDocs = data.items.map((x) => x.inventory).filter(Boolean);
+              rows = withDocs;
             }
-          }
-        }
-
-        // Если ни один из эндпойнтов не сработал — пробуем запасной путь:
-        if (!data) {
-          // Фолбэк: ничего страшного — покажем пустой список и мягкую ошибку
-          throw new Error('Эндпойнт списка write-доступов не найден');
+          } catch {}
         }
 
         if (!dead) setWritable((rows || []).map(normalize));
