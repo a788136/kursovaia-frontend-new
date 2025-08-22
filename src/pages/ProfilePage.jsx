@@ -234,7 +234,7 @@ export default function ProfilePage({ user }) {
   return (
     <div className="space-y-10">
       {/* Профиль */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800">
+      {/* <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800">
         <h1 className="text-2xl font-semibold mb-4">Привет, {user.name}!</h1>
         <div className="text-sm text-gray-600 dark:text-gray-400">
           <div>Email: <span className="font-medium">{user.email}</span></div>
@@ -253,7 +253,7 @@ export default function ProfilePage({ user }) {
             </div>
           )}
         </div>
-      </div>
+      </div> */}
 
       {/* Мои инвентаризации */}
       <div className="space-y-2">
