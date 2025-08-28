@@ -1,5 +1,5 @@
 // src/pages/ProfilePage.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { inventoryService } from '../services/inventoryService';
 import http from '../api/http';
@@ -8,7 +8,7 @@ function normalize(inv) {
   if (!inv || typeof inv !== 'object') return inv;
   return {
     _id: String(inv._id || inv.id || ''),
-    name: inv.name || inv.title || 'Без названия',
+    name: inv.name || inv.title || '',
     description: inv.description || '',
     cover: inv.cover || inv.image || null,
     tags: Array.isArray(inv.tags) ? inv.tags : [],
@@ -19,20 +19,33 @@ function normalize(inv) {
   };
 }
 
-function formatDate(row) {
+function formatDate(row, locale) {
   const d = row.updatedAt || row.createdAt;
-  return d ? new Date(d).toLocaleDateString() : '—';
+  return d ? new Date(d).toLocaleDateString(locale) : '—';
 }
 
 function formatAuthor(row) {
-  if (typeof row.owner === 'object' && row.owner?.name) return row.owner.name;
-  if (row.owner_id) return String(row.owner_id);
-  if (typeof row.owner === 'string') return row.owner;
+  // Пытаемся показать имя и фамилию владельца.
+  // Поддерживаем разные варианты: name | firstName/lastName | displayName | email | username.
+  if (row && typeof row.owner === 'object' && row.owner) {
+    const o = row.owner;
+    const parts = [];
+    if (o.firstName) parts.push(o.firstName);
+    if (o.lastName) parts.push(o.lastName);
+    const fnln = parts.join(' ').trim();
+    if (o.name && o.name.trim()) return o.name.trim();
+    if (fnln) return fnln;
+    if (o.displayName && o.displayName.trim()) return o.displayName.trim();
+    if (o.username && o.username.trim()) return o.username.trim();
+    if (o.email && o.email.trim()) return o.email.trim();
+  }
+  if (row?.owner_id) return String(row.owner_id);
+  if (typeof row?.owner === 'string') return row.owner;
   return '—';
 }
 
 /** «Таблица» на div-ах, как на главной */
-function ListSection({ title, items, emptyText, navigate }) {
+function ListSection({ title, items, emptyText, navigate, t, locale }) {
   const GRID_COLS = '4rem 2fr 1.2fr 3fr 1.1fr';
 
   return (
@@ -46,11 +59,11 @@ function ListSection({ title, items, emptyText, navigate }) {
           className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur dark:bg-gray-900/95 px-4 py-3 text-sm font-semibold"
           style={{ display: 'grid', gridTemplateColumns: GRID_COLS }}
         >
-          <div role="columnheader" className="text-left">Картинка</div>
-          <div role="columnheader" className="text-left">Название</div>
-          <div role="columnheader" className="text-left">Автор</div>
-          <div role="columnheader" className="text-left hidden md:block">Описание</div>
-          <div role="columnheader" className="text-left">Обновлено</div>
+          <div role="columnheader" className="text-left">{t.columns.image}</div>
+          <div role="columnheader" className="text-left">{t.columns.name}</div>
+          <div role="columnheader" className="text-left">{t.columns.owner}</div>
+          <div role="columnheader" className="text-left hidden md:block">{t.columns.description}</div>
+          <div role="columnheader" className="text-left">{t.columns.updated}</div>
         </div>
 
         {/* rows */}
@@ -62,7 +75,7 @@ function ListSection({ title, items, emptyText, navigate }) {
               onClick={() => navigate(`/inventories/${row._id}`)}
               className="px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer border-t border-gray-100 dark:border-gray-800"
               style={{ display: 'grid', gridTemplateColumns: GRID_COLS, alignItems: 'center' }}
-              title={row.name || 'Inventory'}
+              title={row.name || t.noName}
             >
               {/* cover */}
               <div role="cell" className="py-1">
@@ -82,7 +95,7 @@ function ListSection({ title, items, emptyText, navigate }) {
 
               {/* name */}
               <div role="cell" className="font-medium truncate pr-2">
-                {row.name || '—'}
+                {row.name || t.noName}
               </div>
 
               {/* owner */}
@@ -101,7 +114,7 @@ function ListSection({ title, items, emptyText, navigate }) {
 
               {/* updated */}
               <div role="cell" className="whitespace-nowrap text-gray-700 dark:text-gray-300">
-                {formatDate(row)}
+                {formatDate(row, locale)}
               </div>
             </div>
           )) : (
@@ -115,7 +128,7 @@ function ListSection({ title, items, emptyText, navigate }) {
   );
 }
 
-export default function ProfilePage({ user }) {
+export default function ProfilePage({ user, lang = 'ru' }) {
   const navigate = useNavigate();
 
   const [mine, setMine] = useState([]);
@@ -125,6 +138,57 @@ export default function ProfilePage({ user }) {
   const [writable, setWritable] = useState([]);
   const [writableLoading, setWritableLoading] = useState(false);
   const [writableError, setWritableError] = useState('');
+
+  // i18n
+  const tMap = useMemo(() => ({
+    ru: {
+      titleMy: 'Мои инвентаризации',
+      titleWrite: 'Доступ на запись',
+      loadingMine: 'Загрузка ваших инвентаризаций…',
+      loadingWrite: 'Загрузка инвентаризаций с доступом на запись…',
+      emptyMine: 'Вы ещё не создали ни одной инвентаризации.',
+      emptyWrite: 'Нет инвентаризаций, где вам выдали доступ на запись.',
+      noUser: 'Нет данных пользователя.',
+      noName: 'Без названия',
+      columns: {
+        image: 'Картинка',
+        name: 'Название',
+        owner: 'Автор',
+        description: 'Описание',
+        updated: 'Обновлено',
+      },
+      errors: {
+        mine: 'Не удалось загрузить ваши инвентаризации',
+        write: 'Не удалось загрузить инвентаризации с доступом на запись',
+      },
+      locale: 'ru-RU',
+    },
+    en: {
+      titleMy: 'My inventories',
+      titleWrite: 'Write access',
+      loadingMine: 'Loading your inventories…',
+      loadingWrite: 'Loading inventories with write access…',
+      emptyMine: "You haven't created any inventories yet.",
+      emptyWrite: 'No inventories where you have write access.',
+      noUser: 'No user data.',
+      noName: 'Untitled',
+      columns: {
+        image: 'Image',
+        name: 'Name',
+        owner: 'Owner',
+        description: 'Description',
+        updated: 'Updated',
+      },
+      errors: {
+        mine: 'Failed to load your inventories',
+        write: 'Failed to load write-access inventories',
+      },
+      locale: 'en-US',
+    },
+  }), []);
+
+  const t = tMap[lang] || tMap.ru;
+  const locale = t.locale || 'ru-RU';
 
   // Загрузка "Мои инвентаризации" — ТЕПЕРЬ по owner=me
   useEffect(() => {
@@ -138,12 +202,13 @@ export default function ProfilePage({ user }) {
         const list = Array.isArray(res) ? res : (res?.items ?? []);
         if (!dead) setMine(list.map(normalize));
       } catch (e) {
-        if (!dead) setMineError(e?.message || 'Не удалось загрузить ваши инвентаризации');
+        if (!dead) setMineError(e?.message || t.errors.mine);
       } finally {
         if (!dead) setMineLoading(false);
       }
     })();
     return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Загрузка "Инвентаризации с write-доступом" — без своих (excludeOwner=true)
@@ -211,7 +276,7 @@ export default function ProfilePage({ user }) {
       } catch (e) {
         if (!dead) {
           setWritable([]);
-          setWritableError(e?.message || 'Не удалось загрузить инвентаризации с доступом на запись');
+          setWritableError(e?.message || t.errors.write);
         }
       } finally {
         if (!dead) setWritableLoading(false);
@@ -220,62 +285,45 @@ export default function ProfilePage({ user }) {
 
     loadWritable();
     return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   if (!user) {
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800">
         <h1 className="text-2xl font-semibold mb-2">Профиль</h1>
-        <p className="text-gray-600 dark:text-gray-400">Нет данных пользователя.</p>
+        <p className="text-gray-600 dark:text-gray-400">{t.noUser}</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-10">
-      {/* Профиль */}
-      {/* <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800">
-        <h1 className="text-2xl font-semibold mb-4">Привет, {user.name}!</h1>
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          <div>Email: <span className="font-medium">{user.email}</span></div>
-          <div>Язык: <span className="font-medium">{user.lang}</span></div>
-          <div>Тема: <span className="font-medium">{user.theme}</span></div>
-          <div>Создан: {new Date(user.createdAt).toLocaleString()}</div>
-
-          {Array.isArray(user.roles) && user.roles.length > 0 && (
-            <div className="mt-4">
-              <div className="mb-1 opacity-70">Роли</div>
-              <div className="flex flex-wrap gap-2">
-                {user.roles.map((r) => (
-                  <span key={r} className="rounded-full border px-2 py-0.5 text-xs capitalize">{r}</span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div> */}
-
       {/* Мои инвентаризации */}
       <div className="space-y-2">
-        {mineLoading && <div className="text-sm text-gray-500">Загрузка ваших инвентаризаций…</div>}
+        {mineLoading && <div className="text-sm text-gray-500">{t.loadingMine}</div>}
         {!!mineError && <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-yellow-800 text-sm">{mineError}</div>}
         <ListSection
-          title="Мои инвентаризации"
+          title={t.titleMy}
           items={mine}
-          emptyText="Вы ещё не создали ни одной инвентаризации."
+          emptyText={t.emptyMine}
           navigate={navigate}
+          t={t}
+          locale={locale}
         />
       </div>
 
       {/* Инвентаризации с write-доступом */}
       <div className="space-y-2">
-        {writableLoading && <div className="text-sm text-gray-500">Загрузка инвентаризаций с доступом на запись…</div>}
+        {writableLoading && <div className="text-sm text-gray-500">{t.loadingWrite}</div>}
         {!!writableError && <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-yellow-800 text-sm">{writableError}</div>}
         <ListSection
-          title="Доступ на запись"
+          title={t.titleWrite}
           items={writable}
-          emptyText="Нет инвентаризаций, где вам выдали доступ на запись."
+          emptyText={t.emptyWrite}
           navigate={navigate}
+          t={t}
+          locale={locale}
         />
       </div>
     </div>
