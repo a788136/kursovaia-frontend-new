@@ -44,7 +44,7 @@ function formatAuthor(row) {
   return '—';
 }
 
-/** «Таблица» на div-ах, как на главной */
+/** Секция списка: десктоп — «таблица», мобайл — карточки */
 function ListSection({ title, items, emptyText, navigate, t, locale }) {
   const GRID_COLS = '4rem 2fr 1.2fr 3fr 1.1fr';
 
@@ -52,7 +52,8 @@ function ListSection({ title, items, emptyText, navigate, t, locale }) {
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">{title}</h2>
 
-      <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+      {/* ===== Десктопная версия (табличная) ===== */}
+      <div className="hidden md:block rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
         {/* header */}
         <div
           role="row"
@@ -123,6 +124,57 @@ function ListSection({ title, items, emptyText, navigate, t, locale }) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* ===== Мобильная версия (карточки) — описание скрыто ===== */}
+      <div className="md:hidden space-y-3">
+        {items?.length ? items.map((row) => (
+          <div
+            key={row._id}
+            onClick={() => navigate(`/inventories/${row._id}`)}
+            className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition hover:bg-gray-50 cursor-pointer
+                       dark:border-gray-800 dark:bg-gray-950 dark:hover:bg-gray-900"
+            title={row.name || t.noName}
+          >
+            <div className="flex items-center gap-3">
+              {/* cover */}
+              {row.cover ? (
+                <img
+                  src={row.cover}
+                  alt=""
+                  className="h-12 w-12 rounded-lg object-cover border"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="h-12 w-12 rounded-lg border flex items-center justify-center text-xs text-gray-400">
+                  —
+                </div>
+              )}
+
+              {/* name + owner */}
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                  {row.name || t.noName}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  {formatAuthor(row)}
+                </div>
+              </div>
+
+              {/* date (compact) */}
+              <div className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                {formatDate(row, locale)}
+              </div>
+            </div>
+
+            {/* Описание скрыто на мобильной версии, как и на HomePage */}
+          </div>
+        )) : (
+          <div className="rounded-xl border border-gray-200 bg-white p-6 text-center text-gray-500
+                          dark:border-gray-800 dark:bg-gray-950">
+            {emptyText}
+          </div>
+        )}
       </div>
     </section>
   );
