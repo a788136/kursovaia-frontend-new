@@ -63,7 +63,11 @@ const DICT = {
 };
 
 export default function InventoryDetails({ user, lang: langProp }) {
-  const lang = (langProp || localStorage.getItem("lang") || "ru").toLowerCase().startsWith("en") ? "en" : "ru";
+  const lang = (langProp || localStorage.getItem("lang") || "ru")
+    .toLowerCase()
+    .startsWith("en")
+    ? "en"
+    : "ru";
   const L = DICT[lang];
 
   const TAB_VALUES = useMemo(
@@ -128,8 +132,13 @@ export default function InventoryDetails({ user, lang: langProp }) {
     setSaving(true);
     setError("");
     try {
-      const updated = await inventoryService.update(inventory._id, { fields: nextFields });
-      setInventory((prev) => ({ ...(prev || {}), fields: updated?.fields ?? nextFields }));
+      const updated = await inventoryService.update(inventory._id, {
+        fields: nextFields,
+      });
+      setInventory((prev) => ({
+        ...(prev || {}),
+        fields: updated?.fields ?? nextFields,
+      }));
     } catch (e) {
       setError(e?.message || L.errors.saveFieldsFailed);
     } finally {
@@ -151,16 +160,52 @@ export default function InventoryDetails({ user, lang: langProp }) {
   }
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+    <div className="id-page container mx-auto max-w-6xl px-4 py-6 overflow-x-hidden">
+      {/* локальные стили для красивой моб.версии и без горизонтальных скроллов */}
+      <style>{`
+        .id-page { max-width: 100%; }
+        .id-page * { box-sizing: border-box; }
+        .id-page .title-wrap { min-width: 0; }
+        .id-page .title { word-break: break-word; overflow-wrap: anywhere; }
+        /* заставим таб-бар переноситься, а не скроллиться */
+        .id-page [role="tablist"] {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          overflow-x: visible !important;
+          max-width: 100%;
+        }
+        .id-page [role="tab"] {
+          white-space: normal;
+          word-break: break-word;
+          line-height: 1.2;
+        }
+        /* контент табов не должен тянуть ширину */
+        .id-page [role="tabpanel"] {
+          max-width: 100%;
+        }
+        @media (max-width: 640px) {
+          .id-page .head {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: .25rem;
+          }
+          .id-page .status {
+            align-self: stretch;
+            text-align: left;
+          }
+        }
+      `}</style>
+
+      <div className="mb-4 head flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 title-wrap">
           {inventory && (
-            <div className="text-xl font-semibold">
+            <div className="title text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100">
               {inventory.name || (lang === "ru" ? L.untitled : L.untitled)}
             </div>
           )}
         </div>
-        <div className="text-sm opacity-70">
+        <div className="status text-sm opacity-70">
           {saving ? L.saving : loading ? L.loading : null}
         </div>
       </div>
@@ -186,8 +231,19 @@ export default function InventoryDetails({ user, lang: langProp }) {
           {activeTab === "custom-id" && (
             <CustomIdTab
               lang={lang}
-              value={inventory.customIdFormat || { enabled: true, separator: "-", elements: [] }}
-              onChange={(cfg) => setInventory((prev) => ({ ...(prev || {}), customIdFormat: cfg }))}
+              value={
+                inventory.customIdFormat || {
+                  enabled: true,
+                  separator: "-",
+                  elements: [],
+                }
+              }
+              onChange={(cfg) =>
+                setInventory((prev) => ({
+                  ...(prev || {}),
+                  customIdFormat: cfg,
+                }))
+              }
               onSave={handleSaveCustomId}
               disabled={saving}
               sampleFields={sampleFields}
@@ -198,7 +254,9 @@ export default function InventoryDetails({ user, lang: langProp }) {
           {activeTab === "fields" && (
             <FieldsTab
               value={inventory.fields || []}
-              onChange={(next) => setInventory((prev) => ({ ...(prev || {}), fields: next }))}
+              onChange={(next) =>
+                setInventory((prev) => ({ ...(prev || {}), fields: next }))
+              }
               onSave={handleSaveFields}
               disabled={saving}
               inventory={inventory}
@@ -206,7 +264,9 @@ export default function InventoryDetails({ user, lang: langProp }) {
           )}
 
           {/* user передаём — чтобы владелец/админ мог назначать доступы */}
-          {activeTab === "access" && <AccessTab inventory={inventory} user={user} />}
+          {activeTab === "access" && (
+            <AccessTab inventory={inventory} user={user} />
+          )}
 
           {activeTab === "stats" && <StatsTab inventory={inventory} />}
           {activeTab === "export" && <ExportTab inventory={inventory} />}
