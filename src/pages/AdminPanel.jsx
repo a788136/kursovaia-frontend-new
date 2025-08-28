@@ -154,12 +154,13 @@ export default function AdminPanel({ user, lang: langProp }) {
         />
       </div>
 
-      {/* Табличный вид на div/grid */}
+      {/* Контент */}
       {loading ? (
         <div className="opacity-70 text-sm">{L.loading}</div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
-          <div className="min-w-[880px]">
+        <>
+          {/* ====== Десктопная «таблица» (без горизонтального скролла) ====== */}
+          <div className="hidden md:block rounded-xl border border-gray-200 dark:border-gray-800">
             {/* Header */}
             <div className="grid grid-cols-12 bg-gray-50 dark:bg-gray-900/60 text-sm text-gray-700 dark:text-gray-200">
               <div className="px-3 py-2 col-span-4 text-left">{L.user}</div>
@@ -177,7 +178,7 @@ export default function AdminPanel({ user, lang: langProp }) {
                   className="grid grid-cols-12 items-center border-t border-gray-200 dark:border-gray-800"
                 >
                   {/* Пользователь */}
-                  <div className="px-3 py-2 col-span-4">
+                  <div className="px-3 py-2 col-span-4 min-w-0">
                     <div className="flex items-center gap-3">
                       <img
                         src={
@@ -187,16 +188,16 @@ export default function AdminPanel({ user, lang: langProp }) {
                           )}`
                         }
                         alt="avatar"
-                        className="h-8 w-8 rounded-full"
+                        className="h-8 w-8 shrink-0 rounded-full"
                       />
-                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                      <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
                         {u.name || '—'}
                       </div>
                     </div>
                   </div>
 
                   {/* Email */}
-                  <div className="px-3 py-2 col-span-3 text-gray-700 dark:text-gray-300">
+                  <div className="px-3 py-2 col-span-3 text-gray-700 dark:text-gray-300 break-all">
                     {u.email}
                   </div>
 
@@ -261,7 +262,88 @@ export default function AdminPanel({ user, lang: langProp }) {
               )}
             </div>
           </div>
-        </div>
+
+          {/* ====== Мобильный вид (карточки) ====== */}
+          <div className="md:hidden space-y-3">
+            {items.map((u) => (
+              <div
+                key={u.id}
+                className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950"
+              >
+                <div className="flex items-center gap-3">
+                  <img
+                    src={
+                      u.avatar ||
+                      `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(
+                        u.email || u.id
+                      )}`
+                    }
+                    alt="avatar"
+                    className="h-10 w-10 shrink-0 rounded-full"
+                  />
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-900 dark:text-gray-100 break-words">
+                      {u.name || '—'}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 break-all">
+                      {u.email}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {/* Статус */}
+                  {u.blocked ? (
+                    <span className="rounded bg-red-100 px-2 py-1 text-xs text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                      {L.blocked}
+                    </span>
+                  ) : (
+                    <span className="rounded bg-green-100 px-2 py-1 text-xs text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                      {L.active}
+                    </span>
+                  )}
+                  {/* Роль */}
+                  {u.isAdmin || u.role === 'admin' ? (
+                    <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                      {L.admin}
+                    </span>
+                  ) : (
+                    <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                      {L.userRole}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    className="rounded-md border px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50
+                               dark:border-gray-700 dark:hover:bg-gray-800 dark:text-gray-100"
+                    onClick={() => toggleBlock(u)}
+                    disabled={savingId === u.id || String(u.id) === String(user?._id)}
+                    title={String(u.id) === String(user?._id) ? L.cantBlockSelf : ''}
+                  >
+                    {u.blocked ? L.unblock : L.block}
+                  </button>
+                  <button
+                    className="rounded-md border px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50
+                               dark:border-gray-700 dark:hover:bg-gray-800 dark:text-gray-100"
+                    onClick={() => toggleAdmin(u)}
+                    disabled={savingId === u.id || String(u.id) === String(user?._id)}
+                    title={String(u.id) === String(user?._id) ? L.cantChangeSelfRole : ''}
+                  >
+                    {u.isAdmin || u.role === 'admin' ? L.revokeAdmin : L.makeAdmin}
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {!items.length && (
+              <div className="rounded-xl border border-gray-200 bg-white p-4 text-center opacity-70 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
+                {L.notFound}
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* Пагинация */}
