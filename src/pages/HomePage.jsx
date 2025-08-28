@@ -182,7 +182,7 @@ function ListSection({ title, items, emptyText, L, navigate, toolbarRight = null
         </div>
       </div>
 
-      {/* ===== Мобильная версия (карточки) ===== */}
+      {/* ===== Мобильная версия (карточки) — БЕЗ описания ===== */}
       <div className="md:hidden space-y-3">
         {items?.length ? items.map((row) => (
           <div
@@ -223,14 +223,7 @@ function ListSection({ title, items, emptyText, L, navigate, toolbarRight = null
               </div>
             </div>
 
-            {/* description */}
-            {row.description && (
-              <div className="mt-2 text-sm text-gray-700 dark:text-gray-300 break-words">
-                {row.description.length > 120
-                  ? row.description.slice(0, 120) + '…'
-                  : row.description}
-              </div>
-            )}
+            {/* Описание спрятано на мобильной версии по требованию */}
           </div>
         )) : (
           <div className="rounded-xl border border-gray-200 bg-white p-6 text-center text-gray-500
@@ -417,7 +410,7 @@ export default function HomePage({ user, lang: langProp }) {
               onClick={() => setSelectedTag('')}
               className="px-3 py-1.5 rounded-full border text-sm border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
             >
-              {TEXT.ru.clear === 'Сбросить' && TEXT.en.clear === 'Clear' ? ( // чтобы не тащить lang сюда
+              {TEXT.ru.clear === 'Сбросить' && TEXT.en.clear === 'Clear' ? (
                 TEXT[(localStorage.getItem('lang') || 'ru').startsWith('en') ? 'en' : 'ru'].clear
               ) : 'Сбросить'}
             </button>
