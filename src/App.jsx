@@ -139,7 +139,7 @@ export default function App() {
             path="/profile"
             element={
               <ProtectedRoute isAuthed={!!user}>
-                <ProfilePage user={user} />
+                <ProfilePage user={user} lang={lang} />
               </ProtectedRoute>
             }
           />
