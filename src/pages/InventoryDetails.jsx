@@ -1,6 +1,6 @@
 // src/pages/InventoryDetails.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams, Link } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { getInventoryById } from "../services/inventories";
 import { inventoryService } from "../services/inventoryService";
 import Tabs from "../components/ui/Tabs";
@@ -154,9 +154,6 @@ export default function InventoryDetails({ user, lang: langProp }) {
     <div className="container mx-auto max-w-6xl px-4 py-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Link to="/inventories" className="text-sm text-blue-600 hover:underline">
-            {L.back}
-          </Link>
           {inventory && (
             <div className="text-xl font-semibold">
               {inventory.name || (lang === "ru" ? L.untitled : L.untitled)}
