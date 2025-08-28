@@ -97,7 +97,7 @@ function hasTag(inv, tag) {
   return arr.some((t) => String(t).toLowerCase() === String(tag).toLowerCase());
 }
 
-/** «Таблица» на div-ах */
+/** Блок списка: десктоп — «таблица», мобайл — карточки */
 function ListSection({ title, items, emptyText, L, navigate, toolbarRight = null }) {
   const GRID_COLS = '4rem 2fr 1.2fr 3fr 1.1fr';
 
@@ -108,7 +108,8 @@ function ListSection({ title, items, emptyText, L, navigate, toolbarRight = null
         {toolbarRight}
       </div>
 
-      <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+      {/* ===== Десктопная версия (табличная) ===== */}
+      <div className="hidden md:block rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
         {/* header */}
         <div
           role="row"
@@ -129,7 +130,7 @@ function ListSection({ title, items, emptyText, L, navigate, toolbarRight = null
               key={row._id}
               role="row"
               onClick={() => navigate(`/inventories/${row._id}`)}
-              className="px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer border-top border-gray-100 dark:border-gray-800"
+              className="px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer border-t border-gray-100 dark:border-gray-800"
               style={{ display: 'grid', gridTemplateColumns: GRID_COLS, alignItems: 'center' }}
               title={row.name || 'Inventory'}
             >
@@ -179,6 +180,64 @@ function ListSection({ title, items, emptyText, L, navigate, toolbarRight = null
             </div>
           )}
         </div>
+      </div>
+
+      {/* ===== Мобильная версия (карточки) ===== */}
+      <div className="md:hidden space-y-3">
+        {items?.length ? items.map((row) => (
+          <div
+            key={row._id}
+            onClick={() => navigate(`/inventories/${row._id}`)}
+            className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition hover:bg-gray-50 cursor-pointer
+                       dark:border-gray-800 dark:bg-gray-950 dark:hover:bg-gray-900"
+            title={row.name || 'Inventory'}
+          >
+            <div className="flex items-center gap-3">
+              {/* cover */}
+              {row.cover ? (
+                <img
+                  src={row.cover}
+                  alt=""
+                  className="h-12 w-12 rounded-lg object-cover border"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="h-12 w-12 rounded-lg border flex items-center justify-center text-xs text-gray-400">
+                  —
+                </div>
+              )}
+
+              {/* name + owner */}
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                  {row.name || '—'}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  {formatAuthor(row)}
+                </div>
+              </div>
+
+              {/* date (compact) */}
+              <div className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                {formatDate(row)}
+              </div>
+            </div>
+
+            {/* description */}
+            {row.description && (
+              <div className="mt-2 text-sm text-gray-700 dark:text-gray-300 break-words">
+                {row.description.length > 120
+                  ? row.description.slice(0, 120) + '…'
+                  : row.description}
+              </div>
+            )}
+          </div>
+        )) : (
+          <div className="rounded-xl border border-gray-200 bg-white p-6 text-center text-gray-500
+                          dark:border-gray-800 dark:bg-gray-950">
+            {emptyText}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -358,7 +417,9 @@ export default function HomePage({ user, lang: langProp }) {
               onClick={() => setSelectedTag('')}
               className="px-3 py-1.5 rounded-full border text-sm border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
             >
-              {L.clear}
+              {TEXT.ru.clear === 'Сбросить' && TEXT.en.clear === 'Clear' ? ( // чтобы не тащить lang сюда
+                TEXT[(localStorage.getItem('lang') || 'ru').startsWith('en') ? 'en' : 'ru'].clear
+              ) : 'Сбросить'}
             </button>
           )}
         </div>
