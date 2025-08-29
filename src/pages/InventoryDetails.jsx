@@ -161,54 +161,30 @@ export default function InventoryDetails({ user, lang: langProp }) {
 
   return (
     <div className="id-page container mx-auto max-w-6xl px-4 py-6 overflow-x-hidden">
-      {/* Локальные стили: без горизонтального скролла и полностью видимые табы на мобильном */}
+      {/* локальные стили для красивой моб.версии и без горизонтальных скроллов */}
       <style>{`
         .id-page { max-width: 100%; }
         .id-page * { box-sizing: border-box; }
-
         .id-page .title-wrap { min-width: 0; }
         .id-page .title { word-break: break-word; overflow-wrap: anywhere; }
-
-        /* На всякий случай убираем любые горизонтальные скроллы вокруг табов */
-        .id-page .tabs-wrap,
-        .id-page .tabs-wrap * {
+        /* заставим таб-бар переноситься, а не скроллиться */
+        .id-page [role="tablist"] {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          overflow-x: visible !important;
           max-width: 100%;
         }
-        .id-page .tabs-wrap {
-          overflow-x: visible !important;
+        .id-page [role="tab"] {
+          white-space: normal;
+          word-break: break-word;
+          line-height: 1.2;
         }
-
-        /* По умолчанию не трогаем десктопный вид табов */
-        /* --- Мобильная компоновка табов --- */
+        /* контент табов не должен тянуть ширину */
+        .id-page [role="tabpanel"] {
+          max-width: 100%;
+        }
         @media (max-width: 640px) {
-          /* Переводим tablist в сетку без скролла */
-          .id-page .tabs-wrap [role="tablist"] {
-            display: grid !important;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: .5rem;
-            padding: .25rem 0;
-            overflow-x: visible !important;
-            width: 100%;
-          }
-          /* Если у табов есть внутренние классы с min-width/whitespace-nowrap — ломаем их */
-          .id-page .tabs-wrap [role="tab"] {
-            min-width: 0 !important;
-            white-space: normal !important;
-            word-break: break-word;
-            text-align: center;
-            line-height: 1.2;
-          }
-          /* Частый случай: сами табы — button/a без роли */
-          .id-page .tabs-wrap button,
-          .id-page .tabs-wrap a {
-            min-width: 0 !important;
-            white-space: normal !important;
-            word-break: break-word;
-            text-align: center;
-            line-height: 1.2;
-          }
-
-          /* Шапка складывается столбиком */
           .id-page .head {
             flex-direction: column;
             align-items: flex-start;
@@ -240,10 +216,7 @@ export default function InventoryDetails({ user, lang: langProp }) {
         </div>
       )}
 
-      {/* Враппер для надёжного переопределения поведения табов на мобильном */}
-      <div className="tabs-wrap">
-        <Tabs tabs={TAB_VALUES} value={activeTab} onChange={setTab} />
-      </div>
+      <Tabs tabs={TAB_VALUES} value={activeTab} onChange={setTab} />
 
       {loading ? (
         <div className="mt-6 text-sm opacity-70">{L.loadingInventory}</div>
