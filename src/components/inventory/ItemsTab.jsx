@@ -199,7 +199,7 @@ export default function ItemsTab({ inventory }) {
         <div
           role="row"
           className="grid items-center bg-zinc-50 dark:bg-zinc-800 text-left text-sm font-medium
-                     [grid-template-columns:2.5rem_minmax(10rem,1fr)_minmax(14rem,2fr)_7rem_minmax(10rem,1fr)]"
+                     [grid-template-columns:2.5rem_minmax(10rem,1fr)_minmax(14rem,2fr)_7rem_minmax(10rem,1fr)] rounded-t-[16px] rounded-b-none"
         >
           <div role="columnheader" className="p-3">
             <input
