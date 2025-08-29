@@ -158,7 +158,7 @@ export default function ItemsTab({ inventory }) {
   }
 
   return (
-    <div className="space-y-4 overflow-x-hidden">
+    <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -193,12 +193,13 @@ export default function ItemsTab({ inventory }) {
         </div>
       )}
 
-      {/* ===== Десктопная таблица (без горизонтального скролла) ===== */}
-      <div className="hidden md:block rounded-2xl border" role="table" aria-label="Items">
+      {/* Табличный вид на div'ах */}
+      <div className="overflow-x-auto rounded-2xl border" role="table" aria-label="Items">
         {/* Заголовок */}
         <div
           role="row"
           className="grid items-center bg-zinc-50 dark:bg-zinc-800 text-left text-sm font-medium
+                     min-w-max
                      [grid-template-columns:2.5rem_minmax(10rem,1fr)_minmax(14rem,2fr)_7rem_minmax(10rem,1fr)]"
         >
           <div role="columnheader" className="p-3">
@@ -281,84 +282,8 @@ export default function ItemsTab({ inventory }) {
         </div>
       </div>
 
-      {/* ===== Мобильная версия (карточки, без горизонтального скролла) ===== */}
-      <div className="md:hidden space-y-2">
-        {/* Select all для мобилки */}
-        <label className="flex items-center gap-2 text-sm px-1">
-          <input
-            type="checkbox"
-            checked={rows.length > 0 && sel.size === rows.length}
-            onChange={toggleAll}
-            aria-label="Select all"
-          />
-          <span>Select all</span>
-          <span className="opacity-60">({sel.size}/{rows.length})</span>
-        </label>
-
-        {rows.map((r) => {
-          const likeState = likesById.get(r._id) || { count: 0, liked: false };
-          return (
-            <div
-              key={r._id}
-              className="rounded-2xl border bg-white dark:bg-zinc-900 p-3 shadow-sm hover:bg-zinc-50/60 dark:hover:bg-zinc-800/60 transition cursor-pointer"
-              onClick={(e) => {
-                const tag = e.target?.tagName?.toLowerCase();
-                if (tag === 'input' || tag === 'button' || tag === 'svg' || tag === 'path') return;
-                setEditItem(r);
-              }}
-              title={r.custom_id}
-            >
-              {/* Верхняя строка: чекбокс + Custom ID + дата */}
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  <input
-                    type="checkbox"
-                    checked={sel.has(r._id)}
-                    onChange={() => toggleOne(r._id)}
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label={`Select ${r.custom_id}`}
-                  />
-                  <div className="font-mono text-sm truncate">{r.custom_id}</div>
-                </div>
-                <div className="text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
-                  {fmtDate(r.created_at)}
-                </div>
-              </div>
-
-              {/* Поля */}
-              <div className="mt-2">
-                <FieldsPreview fields={r.fields} />
-              </div>
-
-              {/* Низ: лайки */}
-              <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-                <LikeButton
-                  itemId={r._id}
-                  initialCount={likeState.count}
-                  initialLiked={likeState.liked}
-                  disabled={submitting}
-                  onChange={(next) => {
-                    setLikesById((prev) => {
-                      const m = new Map(prev);
-                      m.set(r._id, { count: next.count, liked: next.liked });
-                      return m;
-                    });
-                  }}
-                />
-              </div>
-            </div>
-          );
-        })}
-
-        {rows.length === 0 && (
-          <div className="rounded-2xl border p-4 text-center opacity-60">
-            No items yet
-          </div>
-        )}
-      </div>
-
       {/* Pagination */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center justify-between">
         <div className="text-sm opacity-70">
           Total: {total}
         </div>
@@ -408,9 +333,7 @@ export default function ItemsTab({ inventory }) {
       {editItem && (
         <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4" onClick={() => setEditItem(null)}>
           <div className="w-full max-w-2xl rounded-2xl bg-white dark:bg-zinc-900 p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="text-lg font-semibold mb-3">
-              Edit item — <span className="font-mono">{editItem.custom_id}</span>
-            </div>
+            <div className="text-lg font-semibold mb-3">Edit item — <span className="font-mono">{editItem.custom_id}</span></div>
             <ItemForm
               schema={inventory?.fields || []}
               initial={editItem?.fields || {}}
